@@ -9,6 +9,7 @@ def merge_dicts(left: dict, right: dict) -> dict:
 
 class EngineState(TypedDict):
     source_input: dict
+    sources: list[dict]
     corpus: list[dict]
     content_model: dict
     selected_outputs: list[str]
@@ -19,12 +20,17 @@ class EngineState(TypedDict):
     export: dict | None
 
 
-def empty_state(source_input: dict, selected_outputs: list[str]) -> dict:
+def empty_state(
+    source_input: dict | None = None,
+    selected_outputs: list[str] | None = None,
+    sources: list[dict] | None = None,
+) -> dict:
     return {
-        "source_input": source_input,
+        "source_input": source_input or {},
+        "sources": sources or [],
         "corpus": [],
         "content_model": {},
-        "selected_outputs": selected_outputs,
+        "selected_outputs": selected_outputs or [],
         "artefact_type": None,
         "artefacts": {},
         "fact_checks": {},

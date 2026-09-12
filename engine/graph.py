@@ -7,22 +7,53 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Send, interrupt
 
+from engine.ingestion import ingest_sources
 from engine.llm import LLMProvider, StubAdapter
-from engine.recipes import ARTEFACT_PROFILES, CONTENT_MODEL_SCHEMA, build_generation_prompt, build_understand_prompt
+from engine.recipes import (
+    ARTEFACT_PROFILES,
+    CONTENT_MODEL_SCHEMA,
+    build_generation_prompt,
+    build_understand_prompt,
+    repair_content_model,
+)
 from engine.state import EngineState
 
 WORD_RE = re.compile(r"[a-z0-9]{3,}")
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 
 
-def ingest_source(state: EngineState) -> dict:
-    src = state["source_input"]
-    text = src.get("text", "")
-    kind = src.get("kind", "text")
-    source_id = src.get("id", "doc1")
-    raw_chunks = [c.strip() for c in re.split(r"\n\s*\n", text) if c.strip()]
-    corpus = [{"text": c, "source_ref": f"{source_id} §{i + 1}"} for i, c in enumerate(raw_chunks)]
-    return {"corpus": corpus, "source_input": {**src, "kind": kind, "id": source_id}}
+def _resolve_sources(state: EngineState) -> list[dict]:
+    sources = state.get("sources") or []
+    if sources:
+        return list(sources)
+    source_input = state.get("source_input") or {}
+    if source_input:
+        return [source_input]
+    return []
+
+
+def ingest_source(state: EngineState, llm: LLMProvider) -> dict:
+    sources = _resolve_sources(state)
+    if not sources:
+        raise ValueError("no sources provided in state")
+
+    corpus, descriptors, warnings = ingest_sources(sources, llm)
+    primary = descriptors[0]
+    languages = sorted({d["language"] for d in descriptors})
+    source_types = [d["source_type"] for d in descriptors]
+
+    return {
+        "corpus": corpus,
+        "sources": descriptors,
+        "source_input": {
+            **(state.get("source_input") or {}),
+            "id": primary["source_id"],
+            "kind": primary["kind"] if len(descriptors) == 1 else "multi",
+            "source_type": source_types[0] if len(source_types) == 1 else "multi",
+            "source_language": languages[0] if len(languages) == 1 else "mixed",
+            "warnings": warnings,
+        },
+    }
 
 
 def clean_parse(state: EngineState) -> dict:
@@ -32,16 +63,24 @@ def clean_parse(state: EngineState) -> dict:
         normalized = re.sub(r"\s+", " ", chunk["text"]).strip()
         if normalized and normalized not in seen:
             seen.add(normalized)
-            cleaned.append({"text": normalized, "source_ref": chunk["source_ref"]})
+            entry = {"text": normalized, "source_ref": chunk["source_ref"]}
+            if chunk.get("kind"):
+                entry["kind"] = chunk["kind"]
+            if chunk.get("source_id"):
+                entry["source_id"] = chunk["source_id"]
+            cleaned.append(entry)
     return {"corpus": cleaned}
 
 
 def understand(state: EngineState, llm: LLMProvider) -> dict:
-    prompt = build_understand_prompt(state["corpus"])
-    content_model = llm.generate_json(prompt, json_schema=CONTENT_MODEL_SCHEMA)
-    content_model.setdefault("facts", [])
-    content_model.setdefault("key_messages", [])
-    content_model.setdefault("recommended_actions", [])
+    source_input = state["source_input"]
+    prompt = build_understand_prompt(state["corpus"], source_input, state.get("sources") or [])
+    raw = llm.generate_json(prompt, json_schema=CONTENT_MODEL_SCHEMA)
+    content_model = repair_content_model(
+        raw,
+        fallback_source_type=source_input.get("source_type", "report"),
+        fallback_language=source_input.get("source_language", "en"),
+    )
     return {"content_model": content_model}
 
 
@@ -156,6 +195,7 @@ def guardrails_render(state: EngineState) -> dict:
         "artefacts": validated,
         "files": files,
         "source": state["source_input"].get("id"),
+        "sources": [s.get("source_id") for s in state.get("sources", [])],
         "model": state["content_model"].get("title"),
     }
     return {"export": export}
@@ -163,6 +203,9 @@ def guardrails_render(state: EngineState) -> dict:
 
 def build_graph(llm: LLMProvider | None = None) -> Any:
     provider = llm or StubAdapter()
+
+    def ingest_source_node(state: EngineState) -> dict:
+        return ingest_source(state, provider)
 
     def understand_node(state: EngineState) -> dict:
         return understand(state, provider)
@@ -174,7 +217,7 @@ def build_graph(llm: LLMProvider | None = None) -> Any:
         return apply_feedback(state, provider)
 
     graph = StateGraph(EngineState)
-    graph.add_node("ingest_source", ingest_source)
+    graph.add_node("ingest_source", ingest_source_node)
     graph.add_node("clean_parse", clean_parse)
     graph.add_node("understand", understand_node)
     graph.add_node("generate_and_check", generate_and_check_node)
