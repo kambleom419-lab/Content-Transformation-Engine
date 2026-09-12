@@ -1,69 +1,69 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
+import { ArrowRight, FileText, Menu, ShieldCheck, X } from "lucide-react";
+import Link from "next/link";
+import { useState } from "react";
+import { AntigravityBackground } from "@/components/antigravity-background";
+import { StarsBackground } from "@/components/animate-ui/components/backgrounds/stars";
+
+export default function LandingPage() {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="relay-landing">
+      <div className="absolute inset-0 -z-10 pointer-events-none opacity-30">
+    
+  </div>
+      <header className="relay-landing-nav">
+        <Link href="/" className="relay-landing-brand">
+          <span className="relay-landing-mark">R</span>
+          <span>Relay</span>
+        </Link>
+        <nav className={`relay-landing-links ${mobileOpen ? "open" : ""}`} aria-label="Landing navigation">
+          <a href="#capabilities" onClick={() => setMobileOpen(false)}>Capabilities</a>
+          <a href="#security" onClick={() => setMobileOpen(false)}>Security</a>
+          <a href="#about" onClick={() => setMobileOpen(false)}>About</a>
+          <Link href="/dashboard" className="relay-mobile-cta" onClick={() => setMobileOpen(false)}>Open workspace <ArrowRight size={13} /></Link>
+        </nav>
+        <div className="relay-landing-actions">
+          <Link href="/dashboard" className="relay-landing-signin">Sign in</Link>
+          <Link href="/dashboard" className="relay-landing-nav-button">Open workspace <ArrowRight size={13} /></Link>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <button className="relay-landing-menu" type="button" aria-label="Toggle navigation" onClick={() => setMobileOpen((open) => !open)}>
+          {mobileOpen ? <X size={17} /> : <Menu size={17} />}
+        </button>
+      </header>
+
+      <section className="relay-landing-hero">
+        <div className="relay-landing-hero-content">
+          <div className="relay-landing-eyebrow"><span /> secure content operations</div>
+          <h1>One Source.<br /><span>Multiple Deliverables.</span></h1>
+          <p>Transform documents, reports, advisories, research papers, articles, prompts, images and videos into presentations, executive summaries, advisories, social content and video packages.</p>
+          <div className="relay-landing-hero-actions">
+            <Link href="/dashboard" className="relay-landing-primary">Start Transformation <ArrowRight size={15} /></Link>
+            <a href="#demo" className="relay-landing-secondary"><span className="relay-play">▶</span> View Demo</a>
+          </div>
+          <div className="relay-landing-trust"><ShieldCheck size={14} /><span>Private workspace</span><i /> <span>Reviewable outputs</span><i /> <span>Built for sensitive work</span></div>
         </div>
-      </main>
-    </div>
+        <div className="relay-landing-scroll"><span>01</span><span>source material → shared understanding</span><div /></div>
+      </section>
+
+      <section className="relay-landing-section" id="capabilities">
+        <div className="relay-landing-section-heading"><span>01 / capabilities</span><h2>One source of truth<br /><em>for every channel.</em></h2><p>Relay keeps the original context intact while preparing the formats your teams need to move work forward.</p></div>
+        <div className="relay-landing-capability-grid">
+          <div><span>01</span><FileText size={17} /><h3>Understand the source</h3><p>Make long reports, briefings, and research easier to navigate without losing the details that matter.</p></div>
+          <div><span>02</span><FileText size={17} /><h3>Prepare every deliverable</h3><p>Move from source material to presentations, advisories, summaries, and publish-ready content.</p></div>
+          <div><span>03</span><ShieldCheck size={17} /><h3>Keep review in the loop</h3><p>Give teams a clear, inspectable result before anything is shared externally.</p></div>
+        </div>
+      </section>
+
+      <section className="relay-landing-section relay-landing-security" id="security">
+        <div><span>02 / operating principle</span><h2>Clarity without<br /><em>losing control.</em></h2></div>
+        <div className="relay-landing-principles"><div><strong>01</strong><span>Source-grounded</span><p>Outputs stay anchored to the material your team provides.</p></div><div><strong>02</strong><span>Workspace-private</span><p>Keep consequential work within your organization’s controlled environment.</p></div><div><strong>03</strong><span>Human-reviewed</span><p>Every deliverable is designed to be read, checked, and refined.</p></div></div>
+      </section>
+
+      <section className="relay-landing-final" id="about"><span>relay / workspace</span><h2>Make the next step<br />obvious.</h2><Link href="/dashboard" className="relay-landing-primary">Start Transformation <ArrowRight size={15} /></Link></section>
+      <footer className="relay-landing-footer"><Link href="/" className="relay-landing-brand"><span className="relay-landing-mark">R</span><span>Relay</span></Link><span>One Source. Multiple Deliverables.</span><span>Internal platform</span></footer>
+    </main>
   );
 }
