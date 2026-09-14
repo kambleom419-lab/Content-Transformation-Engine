@@ -1,0 +1,173 @@
+import pytest
+
+from engine.generate import (
+    build_artefact_json_schema,
+    check_ioc_integrity,
+    fact_check_draft,
+    run_generate_and_check,
+)
+
+
+class FakeLLM:
+    """Returns queued responses in order; raises if the queue runs out."""
+
+    def __init__(self, responses):
+        self.responses = list(responses)
+        self.prompts = []
+
+    def generate_json(self, prompt, json_schema=None, parts=None):
+        self.prompts.append(prompt)
+        if not self.responses:
+            raise RuntimeError("FakeLLM: no more queued responses")
+        item = self.responses.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+def make_corpus(pairs):
+    return [{"text": text, "source_ref": ref} for text, ref in pairs]
+
+
+CONTENT_MODEL = {
+    "title": "AcmeServer RCE",
+    "severity": "high",
+    "facts": [{"text": "AcmeServer versions before 4.2.1 allow remote code execution", "source_ref": "doc:p1"}],
+    "iocs": ["CVE-2024-31337", "198.51.100.23"],
+    "entities": ["AcmeServer"],
+    "key_messages": ["Patch to 4.2.1 immediately"],
+    "recommended_actions": ["Apply the vendor patch"],
+}
+
+CORPUS = make_corpus([
+    ("AcmeServer versions before 4.2.1 allow remote code execution via a crafted request.", "doc:p1"),
+    ("Organisations should patch to version 4.2.1 immediately to remain protected.", "doc:p2"),
+])
+
+
+def test_build_artefact_json_schema_marks_array_fields_correctly():
+    schema = build_artefact_json_schema("linkedin_post")
+    assert schema["properties"]["hashtags"]["type"] == "array"
+    assert schema["properties"]["headline"]["type"] == "string"
+    assert set(schema["required"]) == {"headline", "body", "cta", "hashtags"}
+
+
+def test_build_artefact_json_schema_handles_slides_as_objects():
+    schema = build_artefact_json_schema("presentation")
+    assert schema["properties"]["slides"]["type"] == "array"
+    assert schema["properties"]["slides"]["items"]["type"] == "object"
+
+
+def test_fact_check_draft_marks_grounded_claim_supported():
+    draft = {"body": "AcmeServer versions before 4.2.1 allow remote code execution via a crafted request path."}
+    result = fact_check_draft(draft, CORPUS)
+    assert result.supported >= 1
+    assert result.support_ratio > 0
+
+
+def test_fact_check_draft_marks_invented_claim_unsupported():
+    draft = {"body": "The vendor's CEO personally flew to every customer site to apologize in person for this."}
+    result = fact_check_draft(draft, CORPUS)
+    assert result.unsupported >= 1
+    assert result.support_ratio < 0.5
+
+
+def test_check_ioc_integrity_passes_verified_ioc():
+    draft = {"body": "Track CVE-2024-31337 and block 198.51.100.23 immediately."}
+    flags = check_ioc_integrity(draft, CONTENT_MODEL["iocs"])
+    assert flags == []
+
+
+def test_check_ioc_integrity_flags_invented_ioc():
+    draft = {"body": "Also watch for traffic from 203.0.113.99, a newly observed C2 server."}
+    flags = check_ioc_integrity(draft, CONTENT_MODEL["iocs"])
+    assert len(flags) == 1
+    assert flags[0]["verdict"] == "unverified_ioc"
+    assert flags[0]["claim"] == "203.0.113.99"
+
+
+GOOD_DRAFT = {
+    "headline": "Critical RCE in AcmeServer",
+    "body": "AcmeServer versions before 4.2.1 allow remote code execution via a crafted request. Patch to version 4.2.1 immediately to remain protected.",
+    "cta": "Patch now",
+    "hashtags": ["#cybersecurity", "#infosec"],
+}
+
+
+def test_run_generate_and_check_happy_path():
+    llm = FakeLLM([GOOD_DRAFT])
+    result = run_generate_and_check("linkedin_post", CONTENT_MODEL, CORPUS, llm=llm)
+
+    assert result["draft"]["headline"] == "Critical RCE in AcmeServer"
+    assert result["meta"]["retries"] == 0
+    assert result["meta"]["missing_fields"] == []
+    assert result["meta"]["support_ratio"] > 0.5
+
+
+def test_run_generate_and_check_retries_on_bad_json():
+    llm = FakeLLM([RuntimeError("malformed"), GOOD_DRAFT])
+    result = run_generate_and_check("linkedin_post", CONTENT_MODEL, CORPUS, llm=llm)
+    assert result["meta"]["retries"] == 1
+
+
+def test_run_generate_and_check_repairs_missing_fields():
+    incomplete = {"headline": "Critical RCE", "body": "AcmeServer versions before 4.2.1 allow remote code execution."}
+    repair_fill = {"cta": "Patch now", "hashtags": ["#infosec"]}
+    llm = FakeLLM([incomplete, repair_fill])
+
+    result = run_generate_and_check("linkedin_post", CONTENT_MODEL, CORPUS, llm=llm)
+
+    assert result["draft"]["cta"] == "Patch now"
+    assert result["draft"]["hashtags"] == ["#infosec"]
+    assert result["meta"]["fields_repaired"] is True
+    assert result["meta"]["missing_fields"] == []
+
+
+def test_run_generate_and_check_flags_invented_ioc_in_final_draft():
+    draft_with_bad_ioc = {**GOOD_DRAFT, "body": GOOD_DRAFT["body"] + " Also block 203.0.113.99."}
+    llm = FakeLLM([draft_with_bad_ioc])
+    result = run_generate_and_check("linkedin_post", CONTENT_MODEL, CORPUS, llm=llm, min_support_ratio=0.0)
+
+    unverified = [v for v in result["verdicts"] if v["verdict"] == "unverified_ioc"]
+    assert len(unverified) == 1
+    assert unverified[0]["claim"] == "203.0.113.99"
+    assert "203.0.113.99" in result["meta"]["unverified_iocs"]
+
+
+def test_run_generate_and_check_regenerates_when_poorly_grounded_and_keeps_better_version():
+    bad_draft = {
+        "headline": "Breaking News",
+        "body": "The vendor's CEO personally flew to every customer site to apologize for the outage caused by aliens.",
+        "cta": "Read more",
+        "hashtags": ["#news"],
+    }
+    better_draft = {**GOOD_DRAFT}
+    llm = FakeLLM([bad_draft, better_draft])
+
+    result = run_generate_and_check("linkedin_post", CONTENT_MODEL, CORPUS, llm=llm, min_support_ratio=0.6)
+
+    assert result["meta"]["regenerated_for_grounding"] is True
+    assert result["draft"]["headline"] == "Critical RCE in AcmeServer"
+    assert result["meta"]["support_ratio"] > 0.5
+
+
+def test_run_generate_and_check_keeps_original_if_regeneration_not_better():
+    bad_draft = {
+        "headline": "Breaking News",
+        "body": "The vendor's CEO personally flew to every customer site to apologize for the outage caused by aliens.",
+        "cta": "Read more",
+        "hashtags": ["#news"],
+    }
+    also_bad_draft = {**bad_draft, "headline": "Still Bad News"}
+    llm = FakeLLM([bad_draft, also_bad_draft])
+
+    result = run_generate_and_check("linkedin_post", CONTENT_MODEL, CORPUS, llm=llm, min_support_ratio=0.6)
+
+    assert result["meta"]["regenerated_for_grounding"] is False
+    assert result["draft"]["headline"] == "Breaking News"
+
+
+def test_run_generate_and_check_rejects_unknown_artefact_type():
+    llm = FakeLLM([GOOD_DRAFT])
+    with pytest.raises(ValueError):
+        run_generate_and_check("not_a_real_type", CONTENT_MODEL, CORPUS, llm=llm)

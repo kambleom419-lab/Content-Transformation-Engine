@@ -1,4 +1,4 @@
-
+from __future__ import annotations
 SOURCE_TYPES = ["advisory", "report", "article", "policy", "research", "announcement", "incident", "prompt", "image", "transcript"]
 SEVERITIES = ["info", "low", "medium", "high", "critical"]
 

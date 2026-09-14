@@ -9,14 +9,10 @@ from langgraph.types import Send, interrupt
 
 from engine.ingestion import ingest_sources
 from engine.llm import LLMProvider, StubAdapter
-from engine.recipes import (
-    ARTEFACT_PROFILES,
-    CONTENT_MODEL_SCHEMA,
-    build_generation_prompt,
-    build_understand_prompt,
-    repair_content_model,
-)
+from engine.recipes import ARTEFACT_PROFILES
 from engine.state import EngineState
+from engine.understand import run_understand
+from engine.generate import run_generate_and_check
 
 WORD_RE = re.compile(r"[a-z0-9]{3,}")
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
@@ -73,13 +69,11 @@ def clean_parse(state: EngineState) -> dict:
 
 
 def understand(state: EngineState, llm: LLMProvider) -> dict:
-    source_input = state["source_input"]
-    prompt = build_understand_prompt(state["corpus"], source_input, state.get("sources") or [])
-    raw = llm.generate_json(prompt, json_schema=CONTENT_MODEL_SCHEMA)
-    content_model = repair_content_model(
-        raw,
-        fallback_source_type=source_input.get("source_type", "report"),
-        fallback_language=source_input.get("source_language", "en"),
+    content_model = run_understand(
+        corpus=state["corpus"],
+        source_input=state["source_input"],
+        sources=state.get("sources") or [],
+        llm=llm,
     )
     return {"content_model": content_model}
 
@@ -104,55 +98,20 @@ def fan_out_affected(state: EngineState) -> list[Send]:
     return [Send("generate_and_check", _branch_payload(state, t)) for t in types]
 
 
-def _flatten_text(value: Any) -> list[str]:
-    if isinstance(value, str):
-        return [value]
-    if isinstance(value, list):
-        parts = []
-        for item in value:
-            if isinstance(item, dict):
-                parts.extend(_flatten_text(list(item.values())))
-            else:
-                parts.extend(_flatten_text(item))
-        return parts
-    return []
-
-
-def _tokens(text: str) -> set[str]:
-    return set(WORD_RE.findall(text.lower()))
-
-
 def generate_and_check(state: EngineState, llm: LLMProvider) -> dict:
     artefact_type = state["artefact_type"]
-    profile = ARTEFACT_PROFILES[artefact_type]
     params = {k: state["source_input"].get(k) for k in ("target_audience", "tone", "language")}
-    prompt = build_generation_prompt(artefact_type, state["content_model"], params)
-    draft = llm.generate_json(prompt)
-    draft = {k: draft.get(k) for k in profile["fields"] if draft.get(k) is not None}
-
-    chunks = [(c["text"], c["source_ref"]) for c in state["corpus"]]
-    corpus_tokens = [_tokens(t) for t, _ in chunks]
-    sentences = []
-    for piece in _flatten_text(list(draft.values())):
-        for sentence in SENTENCE_RE.split(str(piece)):
-            sentence = sentence.strip()
-            if 20 < len(sentence) < 600:
-                sentences.append(sentence)
-
-    verdicts = []
-    for sentence in sentences:
-        tokens = _tokens(sentence)
-        best_score, best_ref = 0, None
-        for idx, ctokens in enumerate(corpus_tokens):
-            score = len(tokens & ctokens)
-            if score > best_score:
-                best_score, best_ref = score, chunks[idx][1]
-        if best_score >= 3 and best_ref:
-            verdicts.append({"claim": sentence, "verdict": "supported", "citation": best_ref})
-        else:
-            verdicts.append({"claim": sentence, "verdict": "unsupported", "citation": None})
-
-    return {"artefacts": {artefact_type: draft}, "fact_checks": {artefact_type: verdicts}}
+    result = run_generate_and_check(
+        artefact_type=artefact_type,
+        content_model=state["content_model"],
+        corpus=state["corpus"],
+        params=params,
+        llm=llm,
+    )
+    return {
+        "artefacts": {artefact_type: result["draft"]},
+        "fact_checks": {artefact_type: {"verdicts": result["verdicts"], "meta": result["meta"]}},
+    }
 
 
 def human_review(state: EngineState) -> dict:

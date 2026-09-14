@@ -27,9 +27,8 @@ coverage/
 .vscode/
 
 # Local scratch — not for the shared repo
-/README.md
+
 /demo.py
-/samples/
-/tests/
-/docs/
 /requirements-dev.txt
+
+venv310/
