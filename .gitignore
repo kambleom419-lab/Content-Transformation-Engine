@@ -26,9 +26,14 @@ coverage/
 .idea/
 .vscode/
 
+# Tooling
+.commandcode/
+
+# Generated run output (rendered artefacts + uploads)
+/artefacts/
+
 # Local scratch — not for the shared repo
-
+/README.md
+/docs/
+/samples/
 /demo.py
-/requirements-dev.txt
-
-venv310l/

@@ -10,6 +10,7 @@ from langgraph.types import Send, interrupt
 from engine.ingestion import ingest_sources
 from engine.llm import LLMProvider, StubAdapter
 from engine.recipes import ARTEFACT_PROFILES
+from engine.render import write_artefact_files
 from engine.state import EngineState
 from engine.understand import run_understand
 from engine.generate import run_generate_and_check
@@ -141,18 +142,28 @@ def apply_feedback(state: EngineState, llm: LLMProvider) -> dict:
 
 
 def guardrails_render(state: EngineState) -> dict:
-    files = []
+    run_id = state["source_input"].get("run_id") or state["source_input"].get("id") or "run"
+
     validated = []
     for artefact_type, draft in state["artefacts"].items():
         profile = ARTEFACT_PROFILES[artefact_type]
         missing = [k for k in profile["fields"] if not draft.get(k)]
         digest = hashlib.sha256(json.dumps(draft, sort_keys=True).encode()).hexdigest()
         validated.append({"type": artefact_type, "valid": not missing, "missing_fields": missing, "sha256": digest})
-        files.append({"type": artefact_type, "ext": profile["export_ext"], "sha256": digest})
+
+    try:
+        files = write_artefact_files(run_id, state["artefacts"], state["content_model"])
+        render_error = None
+    except Exception as exc:  # rendering is a filesystem boundary — never lose a finished run to it
+        files = []
+        render_error = f"{type(exc).__name__}: {exc}"
+
     export = {
-        "status": "ready",
+        "status": "ready" if files else "empty",
+        "run_id": run_id,
         "artefacts": validated,
         "files": files,
+        "render_error": render_error,
         "source": state["source_input"].get("id"),
         "sources": [s.get("source_id") for s in state.get("sources", [])],
         "model": state["content_model"].get("title"),

@@ -16,9 +16,25 @@ WORD_RE = re.compile(r"[a-z0-9]{3,}")
 MIN_TOKEN_OVERLAP_FOR_GROUNDING = 3
 DEFAULT_MAX_ATTEMPTS = 3
 
+# Function words inflate word-overlap scoring: "the vendor recommends patching
+# within 72 hours" would otherwise share 5 tokens with almost any sentence on
+# the same subject. They must not count as evidence.
+STOPWORDS = frozenset(
+    """
+    about above after again against all also and any are because been before being below
+    between both but can did do does doing down during each few for from further had has
+    have having her here hers herself him himself his how into its itself just more most
+    myself nor not now off once only other others our ours ourselves out over own same she
+    should some such than that the their theirs them themselves then there these they this
+    those through too under until very was were what when where which while who whom why
+    will with would you your yours yourself
+    """.split()
+)
+
 
 def tokens(text: str) -> set[str]:
-    return set(WORD_RE.findall((text or "").lower()))
+    """Content-bearing tokens only — stopwords are excluded from scoring."""
+    return {word for word in WORD_RE.findall((text or "").lower()) if word not in STOPWORDS}
 
 
 def dedupe_strings(items: list[str]) -> list[str]:

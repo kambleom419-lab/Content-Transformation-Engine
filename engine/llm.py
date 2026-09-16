@@ -40,6 +40,8 @@ class LLMProvider(ABC):
 
 class GeminiAdapter(LLMProvider):
     name = "gemini"
+    supports_vision = True
+    supports_audio = True
     FILE_POLL_INTERVAL_S = 2
     FILE_POLL_ATTEMPTS = 60
     MAX_ATTEMPTS = 4
@@ -135,6 +137,8 @@ class GeminiAdapter(LLMProvider):
 
 class StubAdapter(LLMProvider):
     name = "stub"
+    supports_vision = True
+    supports_audio = True
 
     def generate_text(self, prompt: str, parts: list[MediaPart] | None = None) -> str:
         tag = f"[stub:{len(parts)} parts]" if parts else "[stub]"

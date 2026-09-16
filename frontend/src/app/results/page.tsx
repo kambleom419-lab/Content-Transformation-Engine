@@ -1,48 +1,284 @@
 "use client";
 
-import { Copy, Download, FileText, RefreshCw } from "lucide-react";
-import { useState } from "react";
+import { AlertTriangle, CheckCircle2, Copy, Download, FileText, Loader2, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
-
-const tabs = ["Executive Summary", "LinkedIn Post", "Twitter/X Thread", "Presentation", "Advisory", "Video Script"];
+import { downloadUrl, getRun, resumeRun } from "@/lib/api";
+import { artefactLabel, fieldLabel, type Draft, type RunDetail } from "@/lib/types";
 
 export default function ResultsPage() {
-  const [active, setActive] = useState(tabs[0]);
-  const [copied, setCopied] = useState(false);
-  const copy = async () => {
-    await navigator.clipboard?.writeText("The programme has made steady progress across priority departments...");
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  };
+  return (
+    <Suspense fallback={<Shell><p className="relay-panel-description">Loading run…</p></Shell>}>
+      <ResultsView />
+    </Suspense>
+  );
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
   return (
     <main className="relay-shell">
       <AppSidebar />
       <section className="relay-main">
-        <header className="relay-topbar"><div className="relay-breadcrumb"><span>relay</span><span>/</span><strong>results</strong></div><div className="relay-top-actions"><span className="relay-status"><i /> run complete</span><span className="relay-avatar">AI</span></div></header>
-        <div className="relay-results-content">
-          <div className="relay-page-heading"><div><p className="relay-kicker">run_2025_0148 / results</p><h1>Digital services programme</h1><p>Generated 2 minutes ago from <strong>digital-services-programme.docx</strong></p></div><span className="relay-run-id">v3 · 6 outputs</span></div>
-          <div className="relay-results-layout">
-            <section className="relay-document-panel">
-              <div className="relay-document-toolbar"><div className="relay-document-title"><FileText size={15} /><span>{active.toLowerCase().replaceAll(" ", "_")}.md</span></div><div className="relay-document-actions"><button type="button" onClick={copy}><Copy size={13} /> {copied ? "copied" : "copy"}</button><button type="button"><Download size={13} /> export</button><button type="button"><RefreshCw size={13} /> regenerate</button></div></div>
-              <div className="relay-tabs">{tabs.map((tab) => <button className={active === tab ? "active" : ""} key={tab} type="button" onClick={() => setActive(tab)}>{tab}</button>)}</div>
-              <article className="relay-document">
-                <span className="relay-document-eyebrow">executive_summary.md</span>
-                <h2>{active}</h2>
-                <div className="relay-doc-rule" />
-                <p>The Ministry&apos;s Digital Public Services Programme has made steady progress across citizen-facing departments, with 68% of priority services now available online.</p>
-                <p>The next phase should focus on improving adoption in rural districts, strengthening accessibility standards, and establishing a consistent measurement framework across departments.</p>
-                <h3>Key observations</h3>
-                <ul><li>Online availability has expanded across priority services.</li><li>Adoption remains uneven across regions.</li><li>Accessibility and measurement are the next operational priorities.</li></ul>
-                <div className="relay-document-footer"><span>source: digital-services-programme.docx</span><span>review status: pending</span></div>
-              </article>
-            </section>
-            <aside className="relay-results-sidebar">
-              <div className="relay-panel"><div className="relay-panel-header"><div><span className="relay-index">source</span><h2>Source metadata</h2></div></div><div className="relay-meta-file"><FileText size={14} /><span>digital-services-programme.docx</span></div><div className="relay-summary-row"><span>audience</span><strong>Government communications</strong></div><div className="relay-summary-row"><span>tone</span><strong>Formal</strong></div><div className="relay-summary-row"><span>language</span><strong>English</strong></div></div>
-              <div className="relay-panel"><div className="relay-panel-header"><div><span className="relay-index">history</span><h2>Version history</h2></div></div><div className="relay-version active"><span>v3</span><div><strong>Current output</strong><small>just now · Alex Iyer</small></div></div><div className="relay-version"><span>v2</span><div><strong>Updated audience</strong><small>2 min ago</small></div></div><div className="relay-version"><span>v1</span><div><strong>Initial generation</strong><small>4 min ago</small></div></div></div>
-            </aside>
-          </div>
-        </div>
+        <header className="relay-topbar"><div className="relay-breadcrumb"><span>relay</span><span>/</span><strong>results</strong></div><div className="relay-top-actions"><span className="relay-avatar">AI</span></div></header>
+        <div className="relay-results-content">{children}</div>
       </section>
     </main>
+  );
+}
+
+function toItems(value: unknown): string[] {
+  if (value === null || value === undefined) return [];
+  if (typeof value === "string") return value.trim() ? [value] : [];
+  if (Array.isArray(value)) {
+    return value.flatMap((entry) => {
+      if (typeof entry === "string") return entry.trim() ? [entry] : [];
+      if (entry && typeof entry === "object") {
+        const text = Object.values(entry as Record<string, unknown>).filter(Boolean).join(" — ");
+        return text.trim() ? [text] : [];
+      }
+      return [];
+    });
+  }
+  return [String(value)];
+}
+
+function DraftView({ draft }: { draft: Draft }) {
+  const slides = Array.isArray(draft.slides) ? (draft.slides as Record<string, unknown>[]) : null;
+  const entries = Object.entries(draft).filter(([field]) => field !== "slides");
+
+  return (
+    <>
+      {entries.map(([field, value]) => {
+        const items = toItems(value);
+        if (!items.length) return null;
+        return (
+          <div key={field}>
+            <h3>{fieldLabel(field)}</h3>
+            {items.length === 1 ? <p>{items[0]}</p> : <ul>{items.map((item, index) => <li key={index}>{item}</li>)}</ul>}
+          </div>
+        );
+      })}
+      {slides?.length ? (
+        <div>
+          <h3>Slides</h3>
+          {slides.map((slide, index) => (
+            <div key={index} style={{ border: "1px solid var(--relay-border, #2a2a2a)", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
+              <strong>{String(slide.title ?? `Slide ${index + 1}`)}</strong>
+              <ul>{toItems(slide.bullets).map((bullet, bulletIndex) => <li key={bulletIndex}>{bullet}</li>)}</ul>
+              {slide.speaker_notes ? <p style={{ opacity: 0.75, fontSize: 12 }}><em>notes: {String(slide.speaker_notes)}</em></p> : null}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function ResultsView() {
+  const threadId = useSearchParams().get("id") ?? "";
+  const [run, setRun] = useState<RunDetail | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [instruction, setInstruction] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
+  const [active, setActive] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!threadId) return;
+    let cancelled = false;
+    let timer: number | undefined;
+
+    const tick = async () => {
+      try {
+        const detail = await getRun(threadId);
+        if (cancelled) return;
+        setRun(detail);
+        setError("");
+        setActive((current) => current || Object.keys(detail.artefacts ?? {})[0] || "");
+        if (detail.status === "running") timer = window.setTimeout(tick, 2000);
+      } catch (caught) {
+        if (!cancelled) setError(caught instanceof Error ? caught.message : "unknown error");
+      }
+    };
+
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer) window.clearTimeout(timer);
+    };
+  }, [threadId, reloadToken]);
+
+  const artefactTypes = useMemo(() => Object.keys(run?.artefacts ?? {}), [run]);
+  const activeType = active || artefactTypes[0] || "";
+  const draft = run?.artefacts?.[activeType];
+  const check = run?.fact_checks?.[activeType];
+  const verdicts = check?.verdicts ?? [];
+  const flagged = verdicts.filter((verdict) => verdict.verdict !== "supported");
+
+  const resend = async (decision: { action: "accept" | "refine"; instruction?: string; types?: string[] }) => {
+    if (!threadId) return;
+    setBusy(true);
+    setError("");
+    try {
+      await resumeRun(threadId, decision);
+      setInstruction("");
+      setReloadToken((token) => token + 1);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "unknown error");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyDraft = async () => {
+    if (!draft) return;
+    await navigator.clipboard?.writeText(JSON.stringify(draft, null, 2));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1600);
+  };
+
+  if (!threadId) {
+    return (
+      <Shell>
+        <div className="relay-page-heading"><div><p className="relay-kicker">no run selected</p><h1>Nothing to show yet</h1><p>Start a run from the dashboard to see artefacts here.</p></div></div>
+        <Link href="/dashboard" className="relay-generate" style={{ display: "inline-flex", width: "auto", padding: "10px 16px" }}>Go to dashboard</Link>
+      </Shell>
+    );
+  }
+
+  const awaiting = run?.status === "awaiting_review";
+
+  return (
+    <Shell>
+      <div className="relay-page-heading">
+        <div>
+          <p className="relay-kicker">{threadId} / results</p>
+          <h1>{run?.content_model?.title || run?.label || "Run results"}</h1>
+          <p>
+            {run ? `${artefactTypes.length} artefact${artefactTypes.length === 1 ? "" : "s"}` : "loading…"}
+            {run?.content_model?.severity ? ` · severity ${run.content_model.severity}` : ""}
+            {run?.content_model?.source_type ? ` · ${run.content_model.source_type}` : ""}
+          </p>
+        </div>
+        <span className="relay-run-id">{run?.status === "running" ? "processing…" : run?.status ?? "loading"}</span>
+      </div>
+
+      {error && <div className="relay-panel relay-error-panel" style={{ marginBottom: 16 }}><strong>Error</strong><p>{error}</p></div>}
+
+      {run?.warnings?.length ? (
+        <div className="relay-panel" style={{ marginBottom: 16 }}>
+          <div className="relay-panel-header"><div><span className="relay-index">note</span><h2>Ingestion warnings</h2></div></div>
+          <ul>{run.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
+        </div>
+      ) : null}
+
+      {run?.status === "running" ? (
+        <div className="relay-panel" style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <Loader2 size={16} className="relay-spinner" />
+          <span>Ingesting sources and generating deliverables — this can take a few minutes.</span>
+        </div>
+      ) : null}
+
+      <div className="relay-results-layout" style={{ marginTop: 16 }}>
+        <section className="relay-document-panel">
+          <div className="relay-document-toolbar">
+            <div className="relay-document-title"><FileText size={15} /><span>{activeType}.{run?.export?.files?.find((file) => file.type === activeType)?.ext ?? "md"}</span></div>
+            <div className="relay-document-actions">
+              <button type="button" onClick={copyDraft} disabled={!draft}><Copy size={13} /> {copied ? "copied" : "copy"}</button>
+              {(run?.export?.files ?? []).filter((file) => file.type === activeType).map((file) => (
+                <a key={file.ext} href={downloadUrl(threadId, file.type, file.ext)} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "inherit", textDecoration: "none" }}>
+                  <Download size={13} /> {file.ext}
+                </a>
+              ))}
+            </div>
+          </div>
+
+          {artefactTypes.length ? (
+            <div className="relay-tabs">
+              {artefactTypes.map((type) => (
+                <button className={activeType === type ? "active" : ""} key={type} type="button" onClick={() => setActive(type)}>{artefactLabel(type)}</button>
+              ))}
+            </div>
+          ) : null}
+
+          <article className="relay-document">
+            {draft ? (
+              <>
+                <span className="relay-document-eyebrow">{activeType} · {artefactLabel(activeType)}</span>
+                <h2>{run?.content_model?.title || artefactLabel(activeType)}</h2>
+                <div className="relay-doc-rule" />
+                <DraftView draft={draft} />
+              </>
+            ) : (
+              <p className="relay-panel-description">No artefact yet.</p>
+            )}
+            <div className="relay-document-footer">
+              <span>source: {run?.sources?.map((item) => item.source_id).join(", ") || "—"}</span>
+              <span>review status: {run?.review?.action ?? (awaiting ? "awaiting operator" : "—")}</span>
+            </div>
+          </article>
+        </section>
+
+        <aside className="relay-results-sidebar">
+          <div className="relay-panel">
+            <div className="relay-panel-header"><div><span className="relay-index">checks</span><h2>Fact verification</h2></div>{flagged.length ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />}</div>
+            {check?.meta ? <div className="relay-summary-row"><span>support ratio</span><strong>{Math.round((check.meta.support_ratio ?? 0) * 100)}%</strong></div> : null}
+            {check?.meta ? <div className="relay-summary-row"><span>claims checked</span><strong>{check.meta.sentences_checked ?? verdicts.length}</strong></div> : null}
+            {check?.meta?.unverified_iocs?.length ? <div className="relay-summary-row"><span>unverified IoCs</span><strong>{check.meta.unverified_iocs.join(", ")}</strong></div> : null}
+            <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 8 }}>
+              {verdicts.map((verdict, index) => (
+                <div key={index} style={{ display: "flex", gap: 8, padding: "6px 0", borderTop: "1px solid var(--relay-border, #262626)" }}>
+                  {verdict.verdict === "supported" ? <CheckCircle2 size={14} style={{ color: "#41b883", flexShrink: 0, marginTop: 2 }} /> : <AlertTriangle size={14} style={{ color: "#e0a33a", flexShrink: 0, marginTop: 2 }} />}
+                  <div>
+                    <small style={{ display: "block", opacity: 0.9 }}>{verdict.claim}</small>
+                    <small style={{ opacity: 0.55 }}>{verdict.verdict}{verdict.citation ? ` · ${verdict.citation}` : ""}</small>
+                  </div>
+                </div>
+              ))}
+              {!verdicts.length ? <p className="relay-panel-description">No verdicts for this artefact.</p> : null}
+            </div>
+          </div>
+
+          <div className="relay-panel">
+            <div className="relay-panel-header"><div><span className="relay-index">review</span><h2>Human review</h2></div></div>
+            <p className="relay-panel-description">{awaiting ? "This run is paused for your decision." : "Approve, or request a rewrite of specific artefacts."}</p>
+            {awaiting ? (
+              <>
+                <textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="optional: what should change? e.g. shorten the advisory and add patch urgency" />
+                <button className="relay-generate" type="button" disabled={busy} onClick={() => resend({ action: "refine", instruction, types: activeType ? [activeType] : [] })}><RefreshCw size={14} /> Refine {activeType ? artefactLabel(activeType) : ""}</button>
+                <button className="relay-generate" type="button" disabled={busy} onClick={() => resend({ action: "accept" })}><CheckCircle2 size={14} /> Accept &amp; export</button>
+              </>
+            ) : (
+              <div className="relay-summary-row"><span>decision</span><strong>{run?.review?.action ?? "—"}</strong></div>
+            )}
+          </div>
+
+          <div className="relay-panel">
+            <div className="relay-panel-header"><div><span className="relay-index">source</span><h2>Sources</h2></div></div>
+            {(run?.sources ?? []).map((source) => (
+              <div key={source.source_id} className="relay-summary-row"><span>{source.kind}</span><strong>{source.source_id}</strong></div>
+            ))}
+            {run?.content_model?.entities?.length ? <div className="relay-summary-row"><span>entities</span><strong>{run.content_model.entities.slice(0, 5).join(", ")}</strong></div> : null}
+            {run?.content_model?.iocs?.length ? <div className="relay-summary-row"><span>iocs</span><strong>{run.content_model.iocs.slice(0, 5).join(", ")}</strong></div> : null}
+          </div>
+
+          {run?.export?.files?.length ? (
+            <div className="relay-panel">
+              <div className="relay-panel-header"><div><span className="relay-index">export</span><h2>Export pack</h2></div></div>
+              {run.export.files.map((file) => (
+                <div key={`${file.type}-${file.ext}`} className="relay-summary-row">
+                  <span>{file.type}.{file.ext}</span>
+                  <a href={downloadUrl(threadId, file.type, file.ext)} style={{ color: "inherit" }}>{(file.bytes / 1024).toFixed(1)} KB</a>
+                </div>
+              ))}
+              {run.export.render_error ? <p className="relay-panel-description">render error: {run.export.render_error}</p> : null}
+            </div>
+          ) : null}
+        </aside>
+      </div>
+    </Shell>
   );
 }

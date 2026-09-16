@@ -20,6 +20,14 @@ from engine.recipes import ARTEFACT_PROFILES, build_generation_prompt
 from engine.understand import extract_iocs_regex
 
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+# A bare "1" is usually a list or scene number, not a claim. Only treat a number
+# as factual if it carries a unit ("9 hours"), or has two or more digits ("72").
+NUMBER_UNITS = (
+    r"(?:hours?|days?|minutes?|seconds?|weeks?|months?|years?|percent|%|million|billion|"
+    r"thousand|kb|mb|gb|tb|users?|hosts?|servers?|systems?|organi[sz]ations?|customers?|"
+    r"records?|files?|accounts?|devices?|endpoints?|machines?|assets?|attacks?)"
+)
+NUMBER_RE = re.compile(r"(\d+(?:[.,]\d+)*)\s*(" + NUMBER_UNITS + r")?", re.IGNORECASE)
 MIN_SUPPORT_RATIO = 0.6
 MAX_REGENERATION_PASSES = 1
 
@@ -83,31 +91,64 @@ class FactCheckResult:
     verdicts: list[dict] = field(default_factory=list)
     supported: int = 0
     unsupported: int = 0
+    unverified: int = 0
 
     @property
     def support_ratio(self) -> float:
-        total = self.supported + self.unsupported
+        total = self.supported + self.unsupported + self.unverified
         return 1.0 if total == 0 else self.supported / total
 
 
+def numbers(text: str) -> set[str]:
+    """
+    Factual numbers in a piece of text: quantities with units, dates, versions,
+    percentages. Token overlap can never catch a changed number, because "72"
+    and "9" are both just short tokens.
+
+    Bare single digits are skipped — "Scene 1" or "1/6" is structure, not a claim.
+    """
+    found: set[str] = set()
+    for raw, unit in NUMBER_RE.findall(text or ""):
+        cleaned = raw.strip(".,")
+        if not cleaned:
+            continue
+        if unit or len(cleaned.replace(",", "").replace(".", "")) >= 2:
+            found.add(cleaned)
+    return found
+
+
 def fact_check_draft(draft: dict, corpus: list[dict]) -> FactCheckResult:
-    corpus_tokens = [(tokens(c["text"]), c["source_ref"]) for c in corpus]
+    entries = [(tokens(c["text"]), numbers(c["text"]), c["source_ref"]) for c in corpus]
+    known_numbers: set[str] = set().union(*(nums for _, nums, _ in entries)) if entries else set()
     result = FactCheckResult()
 
     for sentence in _extract_sentences(draft):
         sentence_tokens = tokens(sentence)
         best_score, best_ref = 0, None
-        for ctokens, cref in corpus_tokens:
+        for ctokens, _cnumbers, cref in entries:
             score = len(sentence_tokens & ctokens)
             if score > best_score:
                 best_score, best_ref = score, cref
 
-        if best_score >= MIN_TOKEN_OVERLAP_FOR_GROUNDING and best_ref:
-            result.verdicts.append({"claim": sentence, "verdict": "supported", "citation": best_ref})
-            result.supported += 1
-        else:
+        if not (best_score >= MIN_TOKEN_OVERLAP_FOR_GROUNDING and best_ref):
             result.verdicts.append({"claim": sentence, "verdict": "unsupported", "citation": None})
             result.unsupported += 1
+            continue
+
+        invented = numbers(sentence) - known_numbers
+        if invented:
+            result.verdicts.append(
+                {
+                    "claim": sentence,
+                    "verdict": "unverified_number",
+                    "citation": best_ref,
+                    "unverified_numbers": sorted(invented),
+                }
+            )
+            result.unverified += 1
+        else:
+            result.verdicts.append({"claim": sentence, "verdict": "supported", "citation": best_ref})
+            result.supported += 1
 
     return result
 
@@ -214,7 +255,7 @@ def run_generate_and_check(
     regenerated = False
 
     if fact_check.support_ratio < min_support_ratio and MAX_REGENERATION_PASSES > 0:
-        unsupported_claims = [v["claim"] for v in fact_check.verdicts if v["verdict"] == "unsupported"]
+        unsupported_claims = [v["claim"] for v in fact_check.verdicts if v["verdict"] != "supported"]
         new_raw = _regenerate_with_feedback(
             llm, artefact_type, content_model, params, unsupported_claims, max_attempts
         )
@@ -235,9 +276,17 @@ def run_generate_and_check(
         "fields_repaired": fields_repaired,
         "missing_fields": missing,
         "regenerated_for_grounding": regenerated,
-        "sentences_checked": fact_check.supported + fact_check.unsupported,
+        "sentences_checked": fact_check.supported + fact_check.unsupported + fact_check.unverified,
         "sentences_supported": fact_check.supported,
         "sentences_unsupported": fact_check.unsupported,
+        "sentences_unverified": fact_check.unverified,
+        "unverified_numbers": sorted(
+            {
+                value
+                for verdict in fact_check.verdicts
+                for value in verdict.get("unverified_numbers", [])
+            }
+        ),
         "support_ratio": round(fact_check.support_ratio, 3),
         "unverified_iocs": [f["claim"] for f in ioc_flags],
     }

@@ -31,36 +31,43 @@ ARTEFACT_PROFILES = {
         "label": "Structured Security Advisory",
         "fields": ["severity", "executive_summary", "affected_systems", "details", "iocs", "mitigations", "references"],
         "export_ext": "md",
+        "render_formats": ["md", "pdf"],
     },
     "executive_summary": {
         "label": "Executive Briefing",
         "fields": ["title", "summary", "key_points", "recommendations"],
         "export_ext": "md",
+        "render_formats": ["md", "pdf"],
     },
     "linkedin_post": {
         "label": "LinkedIn Post",
         "fields": ["headline", "body", "cta", "hashtags"],
         "export_ext": "txt",
+        "render_formats": ["txt"],
     },
     "x_thread": {
         "label": "X / Twitter Thread",
         "fields": ["tweets"],
         "export_ext": "txt",
+        "render_formats": ["txt"],
     },
     "presentation": {
         "label": "Presentation Slides + Speaker Notes",
         "fields": ["slides"],
-        "export_ext": "json",
+        "export_ext": "pptx",
+        "render_formats": ["pptx", "json"],
     },
     "video_package": {
         "label": "Video Package",
         "fields": ["script", "storyboard", "scene_descriptions", "narration", "subtitles", "visual_recommendations"],
-        "export_ext": "json",
+        "export_ext": "srt",
+        "render_formats": ["json", "srt"],
     },
     "infographic": {
         "label": "Infographic Content + Layout",
         "fields": ["content", "layout_recommendations", "key_messaging"],
         "export_ext": "md",
+        "render_formats": ["md", "json"],
     },
 }
 

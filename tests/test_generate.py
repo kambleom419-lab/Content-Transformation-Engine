@@ -171,3 +171,63 @@ def test_run_generate_and_check_rejects_unknown_artefact_type():
     llm = FakeLLM([GOOD_DRAFT])
     with pytest.raises(ValueError):
         run_generate_and_check("not_a_real_type", CONTENT_MODEL, CORPUS, llm=llm)
+
+
+PATCH_CORPUS = make_corpus([
+    ("The vendor recommends patching the gateway within 72 hours of detection.", "doc:p3"),
+])
+
+
+def test_fact_check_flags_changed_number_despite_matching_wording():
+    """Regression: the source says 72 hours, the draft says 9 hours. Every word
+    matches, so pure token overlap marked it supported. Numbers must be checked."""
+    draft = {"body": "The vendor recommends patching the gateway within 9 hours of detection."}
+    result = fact_check_draft(draft, PATCH_CORPUS)
+
+    assert result.supported == 0
+    assert result.unverified == 1
+    verdict = result.verdicts[0]
+    assert verdict["verdict"] == "unverified_number"
+    assert verdict["unverified_numbers"] == ["9"]
+    assert verdict["citation"] == "doc:p3"
+
+
+def test_fact_check_accepts_the_number_the_source_states():
+    draft = {"body": "The vendor recommends patching the gateway within 72 hours of detection."}
+    result = fact_check_draft(draft, PATCH_CORPUS)
+
+    assert result.supported == 1
+    assert result.unverified == 0
+
+
+def test_unverified_number_lowers_support_ratio():
+    draft = {"body": "The vendor recommends patching the gateway within 9 hours of detection."}
+    result = fact_check_draft(draft, PATCH_CORPUS)
+    assert result.support_ratio == 0.0
+
+
+def test_tokens_excludes_stopwords():
+    from engine.llm_utils import tokens
+
+    assert "the" not in tokens("The vendor and the customer")
+    assert "and" not in tokens("The vendor and the customer")
+    assert "vendor" in tokens("The vendor and the customer")
+
+
+def test_bare_ordinals_are_not_treated_as_facts():
+    """Scene numbers and list markers are structure, not claims — real runs showed
+    a storyboard's "1..5" being reported as five unverified facts."""
+    from engine.generate import numbers
+
+    assert numbers("Scene 1: show the gateway") == set()
+    assert numbers("1/6 - patch immediately") == set()
+    assert numbers("Shot 4") == set()
+
+
+def test_factual_numbers_are_still_captured():
+    from engine.generate import numbers
+
+    assert numbers("patch within 9 hours") == {"9"}
+    assert numbers("upgrade to version 3.2.1") == {"3.2.1"}
+    assert numbers("exploited in 2026") == {"2026"}
+    assert numbers("affecting 1,000 hosts") == {"1,000"}
