@@ -23,6 +23,8 @@ import httpx
 
 from engine import config
 from engine.llm import LLMProvider, MediaPart, StubAdapter, _strip_fences, guess_mime
+from engine.tracing import traced_llm
+from engine.usage import openai_usage, track
 
 
 class ProviderUnavailable(RuntimeError):
@@ -137,7 +139,7 @@ class OpenAICompatAdapter(LLMProvider):
             blocks.append({"type": "image_url", "image_url": {"url": _data_url(part)}})
         return blocks
 
-    def _chat(self, prompt: str, json_schema: dict | None, parts: list[MediaPart] | None) -> str:
+    def _chat(self, prompt: str, json_schema: dict | None, parts: list[MediaPart] | None, entry=None) -> str:
         model = self.vision_model if parts else self.model
         body: dict = {
             "model": model,
@@ -155,6 +157,9 @@ class OpenAICompatAdapter(LLMProvider):
 
         response = self._post("/chat/completions", body)
         payload = response.json()
+        if entry is not None:
+            entry.model = model
+            entry.prompt_tokens, entry.completion_tokens = openai_usage(payload)
         try:
             return payload["choices"][0]["message"]["content"] or ""
         except (KeyError, IndexError, TypeError) as exc:
@@ -181,10 +186,12 @@ class OpenAICompatAdapter(LLMProvider):
             chunks.append(response.text.strip())
         return "\n\n".join(chunk for chunk in chunks if chunk)
 
+    @traced_llm("generate_json")
     def generate_json(
         self, prompt: str, json_schema: dict | None = None, parts: list[MediaPart] | None = None
     ) -> dict:
-        text = self._chat(prompt, json_schema, parts)
+        with track(self.name, self.vision_model if parts else self.model, "generate_json") as entry:
+            text = self._chat(prompt, json_schema, parts, entry)
         stripped = _strip_fences(text).strip()
         try:
             parsed = json.loads(stripped)
@@ -197,12 +204,15 @@ class OpenAICompatAdapter(LLMProvider):
             raise ProviderUnavailable(f"{self.name}: expected a JSON object, got {type(parsed).__name__}")
         return parsed
 
+    @traced_llm("generate_text")
     def generate_text(self, prompt: str, parts: list[MediaPart] | None = None) -> str:
         if parts and self.transcribe_model and any(_is_media(part) for part in parts):
-            return self._transcribe(parts)
-        if parts and not self.supports_vision:
-            raise ProviderRequestError(f"{self.name}: no vision model configured for image input")
-        return self._chat(prompt, None, parts)
+            with track(self.name, self.transcribe_model or self.model, "transcribe"):
+                return self._transcribe(parts)
+        with track(self.name, self.vision_model if parts else self.model, "generate_text") as entry:
+            if parts and not self.supports_vision:
+                raise ProviderRequestError(f"{self.name}: no vision model configured for image input")
+            return self._chat(prompt, None, parts, entry)
 
 
 class RotatingProvider(LLMProvider):

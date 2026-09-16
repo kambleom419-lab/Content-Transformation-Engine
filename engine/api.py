@@ -34,6 +34,8 @@ from engine.llm import StubAdapter
 from engine.providers import build_llm_provider
 from engine.recipes import ARTEFACT_PROFILES
 from engine.state import empty_state
+from engine.tracing import tracing_status
+from engine.usage import LEDGER
 
 OUTPUT_TYPES = sorted(ARTEFACT_PROFILES)
 
@@ -191,9 +193,28 @@ def health() -> dict:
         "chain": chain,
         "last_used": getattr(PROVIDER, "last_used", None),
         "cooldowns": getattr(PROVIDER, "events", []),
+        "tracing": tracing_status(),
         "outputs": OUTPUT_TYPES,
         "runs": len(REGISTRY.list()),
     }
+
+
+@app.get("/usage")
+def usage() -> dict:
+    """
+    Token, latency and error accounting for every provider call this process made.
+
+    Works with or without LangSmith: this is the local, always-on view, so the
+    numbers are still available in an air-gapped deployment.
+    """
+    return LEDGER.snapshot()
+
+
+@app.post("/usage/reset")
+def reset_usage() -> dict:
+    """Clear the ledger — useful for measuring a single demo run cleanly."""
+    LEDGER.reset()
+    return {"status": "reset"}
 
 
 @app.post("/run", status_code=202)

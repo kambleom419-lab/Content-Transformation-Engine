@@ -7,6 +7,9 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
+from engine.tracing import traced_llm
+from engine.usage import gemini_usage, track
+
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm", ".m4v"}
 AUDIO_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".flac", ".ogg", ".opus"}
 
@@ -99,11 +102,12 @@ class GeminiAdapter(LLMProvider):
         return any(hint in message for hint in RETRYABLE_HINTS)
 
     def _generate(self, client, contents, config: dict):
+        """Returns (response, model_actually_used) — the chain may fall back."""
         last_exc: Exception | None = None
         for model in self._model_chain():
             for attempt in range(self.MAX_ATTEMPTS):
                 try:
-                    return client.models.generate_content(model=model, contents=contents, config=config)
+                    return client.models.generate_content(model=model, contents=contents, config=config), model
                 except Exception as exc:
                     last_exc = exc
                     if not self._is_retryable(exc):
@@ -113,15 +117,20 @@ class GeminiAdapter(LLMProvider):
                         time.sleep(delay)
         raise RuntimeError(f"Gemini unavailable after retries across {self._model_chain()}: {last_exc}")
 
+    @traced_llm("generate_text")
     def generate_text(self, prompt: str, parts: list[MediaPart] | None = None) -> str:
         client = self._client()
-        response = self._generate(
-            client,
-            self._build_contents(client, prompt, parts),
-            {"temperature": 0.2, "automatic_function_calling": {"disable": True}},
-        )
-        return (response.text or "").strip()
+        with track(self.name, self.model, "generate_text") as entry:
+            response, entry.model = self._generate(
+                client,
+                self._build_contents(client, prompt, parts),
+                {"temperature": 0.2, "automatic_function_calling": {"disable": True}},
+            )
+            entry.prompt_tokens, entry.completion_tokens = gemini_usage(response)
+            text = (response.text or "").strip()
+        return text
 
+    @traced_llm("generate_json")
     def generate_json(
         self, prompt: str, json_schema: dict | None = None, parts: list[MediaPart] | None = None
     ) -> dict:
@@ -131,8 +140,11 @@ class GeminiAdapter(LLMProvider):
             config["response_mime_type"] = "application/json"
             config["response_schema"] = json_schema
         contents = self._build_contents(client, prompt, parts) if parts else prompt
-        response = self._generate(client, contents, config)
-        return json.loads(_strip_fences((response.text or "").strip()))
+        with track(self.name, self.model, "generate_json") as entry:
+            response, entry.model = self._generate(client, contents, config)
+            entry.prompt_tokens, entry.completion_tokens = gemini_usage(response)
+            text = (response.text or "").strip()
+        return json.loads(_strip_fences(text))
 
 
 class StubAdapter(LLMProvider):
