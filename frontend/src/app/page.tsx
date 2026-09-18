@@ -1,10 +1,10 @@
 "use client";
 
+import { ChromaticImage } from "@/components/ui/chromatic-image";
 import { ArrowRight, FileText, Menu, ShieldCheck, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
-import { AntigravityBackground } from "@/components/antigravity-background";
-import { StarsBackground } from "@/components/animate-ui/components/backgrounds/stars";
+
 
 export default function LandingPage() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -34,18 +34,36 @@ export default function LandingPage() {
         </button>
       </header>
 
-      <section className="relay-landing-hero">
+      <section className="relay-landing-hero mx-auto grid min-h-[calc(100vh-65px)] max-w-7xl items-center gap-12 px-6 lg:grid-cols-[1fr_1.2fr]">
         <div className="relay-landing-hero-content">
           <div className="relay-landing-eyebrow"><span /> secure content operations</div>
           <h1>One Source.<br /><span>Multiple Deliverables.</span></h1>
-          <p>Transform documents, reports, advisories, research papers, articles, prompts, images and videos into presentations, executive summaries, advisories, social content and video packages.</p>
+          <p>Transform source material into clear, reviewable deliverables for every channel.</p>
           <div className="relay-landing-hero-actions">
             <Link href="/dashboard" className="relay-landing-primary">Start Transformation <ArrowRight size={15} /></Link>
             <a href="#demo" className="relay-landing-secondary"><span className="relay-play">▶</span> View Demo</a>
           </div>
           <div className="relay-landing-trust"><ShieldCheck size={14} /><span>Private workspace</span><i /> <span>Reviewable outputs</span><i /> <span>Built for sensitive work</span></div>
-        </div>
+        </div> <div className="relay-landing-hero-media">
+    <ChromaticImage
+      src="/images/1234.png"
+      alt="Relay Dashboard Preview"
+      className="h-[320px] w-full overflow-hidden rounded-3xl border border-neutral-800 sm:h-[440px] lg:h-[600px]"
+      zoom={0.12}
+      displacement={0.03}
+      chromaticShift={0.004}
+      tilt={0.12}
+    />
+  </div>
+
         <div className="relay-landing-scroll"><span>01</span><span>source material → shared understanding</span><div /></div>
+      </section>
+
+      <section className="relay-landing-metrics" aria-label="Relay capabilities">
+        <div><strong>20+</strong><span>Supported formats</span></div>
+        <div><strong>7</strong><span>Deliverable types</span></div>
+        <div><strong>Human</strong><span>Review pipeline</span></div>
+        <div><strong>Secure</strong><span>Workspace</span></div>
       </section>
 
       <section className="relay-landing-section" id="capabilities">

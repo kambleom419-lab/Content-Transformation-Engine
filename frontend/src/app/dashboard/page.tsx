@@ -7,6 +7,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { getRun, startRunWithFiles } from "@/lib/api";
 import type { RunStatus } from "@/lib/types";
 
+
 const OUTPUT_OPTIONS = [
   { type: "executive_summary", label: "Executive Summary", detail: "Concise decision brief", icon: FileText },
   { type: "presentation", label: "Presentation", detail: "Structured slide outline", icon: Presentation },
@@ -94,7 +95,13 @@ export default function DashboardPage() {
 
     <header className="relay-topbar"><div className="relay-breadcrumb"><span>relay</span><span>/</span><strong>dashboard</strong></div><div className="relay-top-actions"><span className="relay-status"><i /> {status ? STATUS_TEXT[status] : "workspace online"}</span><span className="relay-command">⌘ K</span><div className="relay-avatar">AI</div></div></header>
     <div className="relay-content">
-      <div className="relay-page-heading"><div><p className="relay-kicker">workspace / dashboard</p><h1>One source. Multiple deliverables.</h1><p>Transform source material into clear, reviewable content for every channel.</p></div><span className="relay-run-id">{status ? STATUS_TEXT[status] : "idle"}</span></div>
+      <div className="relay-page-heading"><div><p className="relay-kicker">workspace / dashboard</p><h1>One source. Multiple deliverables.</h1><p>Transform source material into clear, reviewable content for every channel.</p></div>
+      <span className="relay-run-id">{status ? STATUS_TEXT[status] : "idle"}</span></div>
+      <div className="relay-overview-grid">
+        <div className="relay-overview-card"><span>Sources uploaded</span><strong>24</strong><small>this month</small></div>
+        <div className="relay-overview-card"><span>Deliverables generated</span><strong>87</strong><small>across 18 runs</small></div>
+        <div className="relay-overview-card"><span>Workspace status</span><strong className="is-positive">Operational</strong><small>secure processing enabled</small></div>
+      </div>
       <div className="relay-grid">
         <section className="relay-editor-column">
 

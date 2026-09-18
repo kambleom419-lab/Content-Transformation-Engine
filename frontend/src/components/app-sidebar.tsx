@@ -16,10 +16,11 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 
 const navItems = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Projects", href: "/projects", icon: Folder },
+  { label: "Workspace", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Transformations", href: "/projects", icon: Folder },
   { label: "Templates", href: "/templates", icon: FileText },
-  { label: "History", href: "/history", icon: History },
+  { label: "Review Queue", href: "/review", icon: History },
+  { label: "Activity", href: "/history", icon: History },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
 
