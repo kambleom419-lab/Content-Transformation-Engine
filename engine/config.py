@@ -35,6 +35,28 @@ def get_use_stub() -> bool:
     return os.getenv("USE_STUB", "0").strip().lower() in {"1", "true", "yes", "on"}
 
 
+def get_max_concurrent_branches() -> int:
+    """
+    Cap on how many fan-out branches may run at once.
+
+    Parallelism is a latency optimisation that costs quota: N selected outputs
+    means N simultaneous provider requests. On the free tiers in use here that
+    matters —
+
+      * Groq allows roughly 30 requests/minute, so a burst is usually fine.
+      * OpenRouter's shared free pool throttles aggressively and is the fragile
+        one, especially when several branches land on it during a fallback.
+
+    Selecting all 7 artefacts therefore fires 7 concurrent requests. Raising the
+    cap buys latency; it must stay below what the weakest provider in the chain
+    will tolerate. Raising it without headroom turns a working demo into a 429.
+    """
+    try:
+        return max(1, int(os.getenv("MAX_CONCURRENT_BRANCHES", "3")))
+    except ValueError:
+        return 3
+
+
 def get_artefacts_dir() -> Path:
     raw = Path(os.getenv("ARTEFACTS_DIR", "artefacts"))
     return raw if raw.is_absolute() else REPO_ROOT / raw

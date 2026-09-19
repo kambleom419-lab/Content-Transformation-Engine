@@ -70,3 +70,12 @@ export function listRuns() {
 export function downloadUrl(threadId: string, artefactType: string, ext?: string) {
   return `${BASE}/run/${threadId}/artefacts/${artefactType}/download${ext ? `?ext=${ext}` : ""}`;
 }
+
+/**
+ * Render an artefact on the fly for preview. Unlike downloadUrl this works at any
+ * stage, including while the run is paused for review — nothing is written to
+ * disk, so an operator can inspect the real output before approving it.
+ */
+export function previewUrl(threadId: string, artefactType: string, ext?: string) {
+  return `${BASE}/run/${threadId}/preview/${artefactType}${ext ? `?ext=${ext}` : ""}`;
+}

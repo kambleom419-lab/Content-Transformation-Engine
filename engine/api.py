@@ -21,18 +21,19 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from engine.config import get_artefacts_dir, get_cors_origins, get_use_stub
+from engine.config import get_artefacts_dir, get_cors_origins, get_max_concurrent_branches, get_use_stub
 from engine.graph import build_graph
 from engine.jobs import AWAITING_REVIEW, COMPLETE, FAILED, RUNNING, JobRegistry, Run
 from engine.llm import StubAdapter
 from engine.providers import build_llm_provider
 from engine.recipes import ARTEFACT_PROFILES
+from engine.render import render_payload
 from engine.state import empty_state
 from engine.tracing import tracing_status
 from engine.usage import LEDGER
@@ -45,6 +46,7 @@ MEDIA_TYPES = {
     ".json": "application/json",
     ".pdf": "application/pdf",
     ".srt": "application/x-subrip",
+    ".png": "image/png",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 
@@ -52,6 +54,7 @@ PROVIDER = StubAdapter() if get_use_stub() else build_llm_provider()
 GRAPH = build_graph(PROVIDER)
 REGISTRY = JobRegistry()
 EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="engine-run")
+MAX_CONCURRENT_BRANCHES = get_max_concurrent_branches()
 
 
 class SourceSpec(BaseModel):
@@ -149,7 +152,14 @@ def _record_snapshot(thread_id: str, snapshot: dict) -> None:
 
 
 def _run_graph(thread_id: str, state: dict | None, decision: dict | None) -> None:
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {
+        "configurable": {"thread_id": thread_id},
+        # Bound the fan-out. Every selected output is one concurrent provider
+        # request, so without a cap "select all 7" fires 7 at once and the
+        # weakest provider in the chain answers with a 429. See
+        # config.get_max_concurrent_branches for the reasoning.
+        "max_concurrency": MAX_CONCURRENT_BRANCHES,
+    }
     try:
         if decision is None:
             snapshot = GRAPH.invoke(state, config)
@@ -193,6 +203,7 @@ def health() -> dict:
         "chain": chain,
         "last_used": getattr(PROVIDER, "last_used", None),
         "cooldowns": getattr(PROVIDER, "events", []),
+        "max_concurrent_branches": MAX_CONCURRENT_BRANCHES,
         "tracing": tracing_status(),
         "outputs": OUTPUT_TYPES,
         "runs": len(REGISTRY.list()),
@@ -300,6 +311,42 @@ def resume_run(thread_id: str, request: ResumeRequest) -> dict:
         EXECUTOR.submit(_run_graph, thread_id, None, decision)
 
     return {"thread_id": thread_id, "status": RUNNING, "action": action}
+
+
+@app.get("/run/{thread_id}/preview/{artefact_type}")
+def preview_artefact(thread_id: str, artefact_type: str, ext: str | None = None):
+    """
+    Render an artefact on demand, purely for preview.
+
+    Available at any stage — including while the run is paused for review — so
+    the operator sees the real poster or document *before* approving it. Nothing
+    is written to disk and the export manifest is untouched, which keeps the
+    "approved" record meaningful: only guardrails_render produces deliverables.
+    """
+    run = _require_run(thread_id)
+    if artefact_type not in ARTEFACT_PROFILES:
+        raise HTTPException(404, f"unknown artefact type: {artefact_type}")
+
+    draft = (run.snapshot.get("artefacts") or {}).get(artefact_type)
+    if not isinstance(draft, dict) or not draft:
+        raise HTTPException(404, f"no draft for {artefact_type} yet")
+
+    fmt = (ext or ARTEFACT_PROFILES[artefact_type]["export_ext"]).lower()
+    if fmt not in ARTEFACT_PROFILES[artefact_type]["render_formats"]:
+        raise HTTPException(400, f"{artefact_type} does not render as .{fmt}")
+
+    try:
+        payload, kind = render_payload(artefact_type, draft, fmt, run.snapshot.get("content_model") or {})
+    except Exception as exc:
+        raise HTTPException(500, f"preview render failed: {type(exc).__name__}: {exc}")
+
+    data = payload.encode("utf-8") if kind == "text" else payload
+    return Response(
+        content=data,
+        media_type=MEDIA_TYPES.get(f".{fmt}", "application/octet-stream"),
+        # inline, so <img> and <iframe> can display it rather than download it
+        headers={"Content-Disposition": f'inline; filename="{artefact_type}.{fmt}"'},
+    )
 
 
 @app.get("/run/{thread_id}/artefacts/{artefact_type}/download")

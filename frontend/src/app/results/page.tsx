@@ -4,9 +4,11 @@ import { AlertTriangle, CheckCircle2, Copy, Download, FileText, Loader2, Refresh
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { ArtefactPreview } from "@/components/artefact-previews";
 import { AppSidebar } from "@/components/app-sidebar";
+import { FilePreview } from "@/components/file-preview";
 import { downloadUrl, getRun, resumeRun } from "@/lib/api";
-import { artefactLabel, fieldLabel, type Draft, type RunDetail } from "@/lib/types";
+import { artefactLabel, type RunDetail } from "@/lib/types";
 
 export default function ResultsPage() {
   return (
@@ -28,53 +30,8 @@ function Shell({ children }: { children: React.ReactNode }) {
   );
 }
 
-function toItems(value: unknown): string[] {
-  if (value === null || value === undefined) return [];
-  if (typeof value === "string") return value.trim() ? [value] : [];
-  if (Array.isArray(value)) {
-    return value.flatMap((entry) => {
-      if (typeof entry === "string") return entry.trim() ? [entry] : [];
-      if (entry && typeof entry === "object") {
-        const text = Object.values(entry as Record<string, unknown>).filter(Boolean).join(" — ");
-        return text.trim() ? [text] : [];
-      }
-      return [];
-    });
-  }
-  return [String(value)];
-}
-
-function DraftView({ draft }: { draft: Draft }) {
-  const slides = Array.isArray(draft.slides) ? (draft.slides as Record<string, unknown>[]) : null;
-  const entries = Object.entries(draft).filter(([field]) => field !== "slides");
-
-  return (
-    <>
-      {entries.map(([field, value]) => {
-        const items = toItems(value);
-        if (!items.length) return null;
-        return (
-          <div key={field}>
-            <h3>{fieldLabel(field)}</h3>
-            {items.length === 1 ? <p>{items[0]}</p> : <ul>{items.map((item, index) => <li key={index}>{item}</li>)}</ul>}
-          </div>
-        );
-      })}
-      {slides?.length ? (
-        <div>
-          <h3>Slides</h3>
-          {slides.map((slide, index) => (
-            <div key={index} style={{ border: "1px solid var(--relay-border, #2a2a2a)", borderRadius: 8, padding: "10px 12px", marginBottom: 10 }}>
-              <strong>{String(slide.title ?? `Slide ${index + 1}`)}</strong>
-              <ul>{toItems(slide.bullets).map((bullet, bulletIndex) => <li key={bulletIndex}>{bullet}</li>)}</ul>
-              {slide.speaker_notes ? <p style={{ opacity: 0.75, fontSize: 12 }}><em>notes: {String(slide.speaker_notes)}</em></p> : null}
-            </div>
-          ))}
-        </div>
-      ) : null}
-    </>
-  );
-}
+// Per-artefact rendering now lives in components/artefact-previews.tsx, where a
+// generic field walk was replaced by a tailored preview per output type.
 
 function ResultsView() {
   const threadId = useSearchParams().get("id") ?? "";
@@ -189,9 +146,12 @@ function ResultsView() {
             <div className="relay-document-actions">
               <button type="button" onClick={copyDraft} disabled={!draft}><Copy size={13} /> {copied ? "copied" : "copy"}</button>
               {(run?.export?.files ?? []).filter((file) => file.type === activeType).map((file) => (
-                <a key={file.ext} href={downloadUrl(threadId, file.type, file.ext)} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "inherit", textDecoration: "none" }}>
-                  <Download size={13} /> {file.ext}
-                </a>
+                <span key={file.ext} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <FilePreview threadId={threadId} type={file.type} ext={file.ext} draft={draft} />
+                  <a href={downloadUrl(threadId, file.type, file.ext)} style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "inherit", textDecoration: "none" }}>
+                    <Download size={13} /> {file.ext}
+                  </a>
+                </span>
               ))}
             </div>
           </div>
@@ -210,7 +170,12 @@ function ResultsView() {
                 <span className="relay-document-eyebrow">{activeType} · {artefactLabel(activeType)}</span>
                 <h2>{run?.content_model?.title || artefactLabel(activeType)}</h2>
                 <div className="relay-doc-rule" />
-                <DraftView draft={draft} />
+                <ArtefactPreview
+                  type={activeType}
+                  draft={draft}
+                  threadId={threadId}
+                  severity={run?.content_model?.severity}
+                />
               </>
             ) : (
               <p className="relay-panel-description">No artefact yet.</p>
@@ -271,7 +236,15 @@ function ResultsView() {
               {run.export.files.map((file) => (
                 <div key={`${file.type}-${file.ext}`} className="relay-summary-row">
                   <span>{file.type}.{file.ext}</span>
-                  <a href={downloadUrl(threadId, file.type, file.ext)} style={{ color: "inherit" }}>{(file.bytes / 1024).toFixed(1)} KB</a>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
+                    <FilePreview
+                      threadId={threadId}
+                      type={file.type}
+                      ext={file.ext}
+                      draft={run?.artefacts?.[file.type]}
+                    />
+                    <a href={downloadUrl(threadId, file.type, file.ext)} style={{ color: "inherit" }}>{(file.bytes / 1024).toFixed(1)} KB</a>
+                  </span>
                 </div>
               ))}
               {run.export.render_error ? <p className="relay-panel-description">render error: {run.export.render_error}</p> : null}

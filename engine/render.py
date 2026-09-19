@@ -122,11 +122,22 @@ def render_plaintext(artefact_type: str, draft: dict, content_model: dict | None
         tweets = _as_list(draft.get("tweets"))
         if not tweets:
             return ""
+
+        total = len(tweets)
         # Models often number their own tweets ("1/ ..."). Don't number twice.
         if any(re.match(r"^\s*\d+\s*[/.)]", tweet) for tweet in tweets):
-            return "\n\n".join(tweets).rstrip() + "\n"
-        total = len(tweets)
-        return "\n\n".join(f"{i}/{total}\n{tweet}" for i, tweet in enumerate(tweets, 1)) + "\n"
+            body = "\n\n".join(tweets)
+        else:
+            body = "\n\n".join(f"{i}/{total}\n{tweet}" for i, tweet in enumerate(tweets, 1))
+
+        # Posts stay clean above the divider for copy-paste; the checks go below.
+        longest = max(len(tweet) for tweet in tweets)
+        over = [index for index, tweet in enumerate(tweets, 1) if len(tweet) > 280]
+        summary = [f"{total} posts  ·  longest {longest}/280 characters"]
+        if over:
+            summary.append(f"OVER THE 280 LIMIT: post {', '.join(str(i) for i in over)}")
+
+        return f"{body}\n\n---\n" + "\n".join(summary) + "\n"
 
     profile = ARTEFACT_PROFILES[artefact_type]
     blocks: list[str] = []
@@ -144,35 +155,359 @@ def render_json(draft: dict, *_) -> str:
     return json.dumps(draft, indent=2, ensure_ascii=False) + "\n"
 
 
+# ---------------------------------------------------------------------------
+# Infographic poster — a real PNG, not a text brief
+# ---------------------------------------------------------------------------
+#
+# An infographic is inherently visual, so the deliverable is an image. Pillow is
+# used rather than HTML + a headless browser because this is a *runtime* render:
+# making the engine depend on a bundled browser would be a heavy, odd dependency
+# for an on-prem deployment.
+
+POSTER_SIZE = (1200, 1600)
+POSTER_MARGIN = 88
+
+POSTER_COLOURS = {
+    "ink": "#0F172A",
+    "body": "#334155",
+    "muted": "#64748B",
+    "faint": "#94A3B8",
+    "rule": "#E2E8F0",
+    "accent": "#1D4ED8",
+    "accent_soft": "#EFF4FF",
+    "page": "#FFFFFF",
+}
+
+SEVERITY_COLOURS = {
+    "critical": "#B91C1C",
+    "high": "#C2410C",
+    "medium": "#B45309",
+    "low": "#1D4ED8",
+    "info": "#475569",
+}
+
+# Font discovery: Windows, Linux and macOS paths, then Pillow's built-in fallback.
+POSTER_FONTS = [
+    (r"C:\Windows\Fonts\segoeuib.ttf", r"C:\Windows\Fonts\segoeui.ttf"),
+    ("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+    ("/Library/Fonts/Arial Bold.ttf", "/Library/Fonts/Arial.ttf"),
+]
+
+
+def _poster_font_paths() -> tuple[str | None, str | None]:
+    for bold, regular in POSTER_FONTS:
+        if Path(bold).is_file() and Path(regular).is_file():
+            return bold, regular
+    return None, None
+
+
+def _poster_font(size: int, bold: bool = False):
+    from PIL import ImageFont
+
+    bold_path, regular_path = _poster_font_paths()
+    chosen = bold_path if bold else regular_path
+    if chosen:
+        try:
+            return ImageFont.truetype(chosen, size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
+
+
+def _wrap(draw, text: str, font, max_width: int) -> list[str]:
+    lines: list[str] = []
+    current = ""
+    for word in str(text or "").split():
+        trial = f"{current} {word}".strip()
+        if draw.textlength(trial, font=font) <= max_width or not current:
+            current = trial
+        else:
+            lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
+    return lines or [""]
+
+
+def render_infographic_png(draft: dict, content_model: dict | None = None, artefact_type: str = "infographic") -> bytes:
+    from PIL import Image, ImageDraw
+
+    model = content_model or {}
+    title = _title_for(artefact_type, draft, content_model)
+    severity = str(model.get("severity") or "").strip().lower()
+    accent = SEVERITY_COLOURS.get(severity, POSTER_COLOURS["accent"])
+
+    width, height = POSTER_SIZE
+    margin = POSTER_MARGIN
+    inner = width - margin * 2
+
+    image = Image.new("RGB", POSTER_SIZE, POSTER_COLOURS["page"])
+    draw = ImageDraw.Draw(image)
+
+    f_badge = _poster_font(26, bold=True)
+    f_title = _poster_font(62, bold=True)
+    f_section = _poster_font(24, bold=True)
+    f_body = _poster_font(28)
+    f_small = _poster_font(22)
+    f_micro = _poster_font(20)
+
+    # severity band
+    draw.rectangle([0, 0, width, 14], fill=accent)
+
+    y = margin + 20
+
+    # badge
+    badge_text = (severity or "advisory").upper()
+    badge_w = draw.textlength(badge_text, font=f_badge) + 40
+    draw.rounded_rectangle([margin, y, margin + badge_w, y + 46], radius=23, fill=accent)
+    draw.text((margin + 20, y + 9), badge_text, font=f_badge, fill="#FFFFFF")
+    y += 82
+
+    # title
+    for line in _wrap(draw, title, f_title, inner):
+        draw.text((margin, y), line, font=f_title, fill=POSTER_COLOURS["ink"])
+        y += 74
+    y += 18
+    draw.line([margin, y, width - margin, y], fill=POSTER_COLOURS["rule"], width=2)
+    y += 44
+
+    def section(label: str) -> None:
+        nonlocal y
+        draw.text((margin, y), label.upper(), font=f_section, fill=accent)
+        y += 44
+
+    def bullets(items: list[str], bullet: str = "\u25b8") -> None:
+        nonlocal y
+        for item in items:
+            lines = _wrap(draw, item, f_body, inner - 40)
+            draw.text((margin, y), bullet, font=f_body, fill=accent)
+            for index, line in enumerate(lines):
+                draw.text((margin + 34, y), line, font=f_body, fill=POSTER_COLOURS["body"])
+                y += 40
+            y += 10
+
+    # The infographic profile names this field "key_messaging"; the content model
+    # calls it "key_messages". Accept either, and fall back to the content model so
+    # the poster is never empty when the draft omitted it.
+    key_messages = (
+        _as_list(draft.get("key_messaging"))
+        or _as_list(draft.get("key_messages"))
+        or _as_list(model.get("key_messages"))
+    )
+    if key_messages:
+        section("Key messages")
+        bullets(key_messages[:5])
+        y += 22
+
+    content = _as_list(draft.get("content"))
+    if content:
+        section("Detail")
+        for block in content[:4]:
+            for line in _wrap(draw, block, f_body, inner):
+                draw.text((margin, y), line, font=f_body, fill=POSTER_COLOURS["body"])
+                y += 40
+            y += 14
+        y += 10
+
+    iocs = _as_list(model.get("iocs"))
+    if iocs and y < height - 300:
+        section("Indicators")
+        x = margin
+        row_height = 48
+        for ioc in iocs[:8]:
+            chip_w = draw.textlength(ioc, font=f_micro) + 30
+            if x + chip_w > width - margin:
+                x = margin
+                y += row_height
+            draw.rounded_rectangle([x, y, x + chip_w, y + 36], radius=8,
+                                   fill=POSTER_COLOURS["accent_soft"])
+            draw.text((x + 15, y + 8), ioc, font=f_micro, fill=accent)
+            x += chip_w + 12
+        y += row_height + 20
+
+    # footer provenance
+    footer_y = height - margin - 56
+    draw.line([margin, footer_y, width - margin, footer_y], fill=POSTER_COLOURS["rule"], width=2)
+    source_label = model.get("source_type") or "source document"
+    draw.text((margin, footer_y + 18), f"Generated by the Content Transformation Engine  ·  {source_label}",
+              font=f_small, fill=POSTER_COLOURS["muted"])
+    if model.get("title"):
+        stamp = "human-reviewed"
+        stamp_w = draw.textlength(stamp, font=f_micro) + 28
+        draw.rounded_rectangle([width - margin - stamp_w, footer_y + 12,
+                                width - margin, footer_y + 48], radius=18,
+                               outline=POSTER_COLOURS["rule"], width=2)
+        draw.text((width - margin - stamp_w + 14, footer_y + 20), stamp,
+                  font=f_micro, fill=POSTER_COLOURS["muted"])
+
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue()
+
+
 def render_pptx(draft: dict, content_model: dict | None = None, artefact_type: str = "presentation") -> bytes:
+    """
+    A designed deck.
+
+    The earlier version used PowerPoint's built-in layouts, which is why it
+    looked like a default template. This builds slides from blank layouts and
+    places every element, so the deck carries our own typography, spacing and
+    accent colour instead of inheriting whatever theme the viewer has.
+    """
     from pptx import Presentation
+    from pptx.dml.color import RGBColor
+    from pptx.enum.shapes import MSO_SHAPE
+    from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
+    from pptx.util import Inches, Pt
 
-    slides = draft.get("slides") or []
+    INK = RGBColor(0x0F, 0x17, 0x2A)
+    BODY = RGBColor(0x33, 0x41, 0x55)
+    MUTED = RGBColor(0x7A, 0x86, 0x99)
+    ACCENT = RGBColor(0x1D, 0x4E, 0xD8)
+    WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+    PALE = RGBColor(0xE8, 0xEF, 0xFC)
+    FONT = "Segoe UI"
+
     prs = Presentation()
+    prs.slide_width = Inches(13.333)
+    prs.slide_height = Inches(7.5)
+    blank = prs.slide_layouts[6]
 
-    cover = prs.slides.add_slide(prs.slide_layouts[0])
-    cover.shapes.title.text = _title_for(artefact_type, draft, content_model)
-    if len(cover.placeholders) > 1:
-        cover.placeholders[1].text = "Generated by the Content Transformation Engine"
+    width = prs.slide_width
+    height = prs.slide_height
 
-    for index, slide in enumerate(slides, start=1):
-        if isinstance(slide, str):
-            slide = {"title": f"Slide {index}", "bullets": [slide]}
+    def rect(slide, left, top, w, h, fill):
+        shape = slide.shapes.add_shape(MSO_SHAPE.RECTANGLE, left, top, w, h)
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = fill
+        shape.line.fill.background()
+        shape.shadow.inherit = False
+        return shape
 
-        page = prs.slides.add_slide(prs.slide_layouts[1])
-        page.shapes.title.text = str(slide.get("title") or f"Slide {index}")
+    def text(slide, left, top, w, h, value, size, color, bold=False, align=PP_ALIGN.LEFT, spacing=1.15):
+        box = slide.shapes.add_textbox(left, top, w, h)
+        frame = box.text_frame
+        frame.word_wrap = True
+        frame.vertical_anchor = MSO_ANCHOR.TOP
+        para = frame.paragraphs[0]
+        para.text = value
+        para.alignment = align
+        para.line_spacing = spacing
+        run = para.runs[0]
+        run.font.size = Pt(size)
+        run.font.bold = bold
+        run.font.color.rgb = color
+        run.font.name = FONT
+        return box
 
-        bullets = _as_list(slide.get("bullets"))
-        frame = page.placeholders[1].text_frame
-        frame.clear()
-        for position, bullet in enumerate(bullets):
-            paragraph = frame.paragraphs[0] if position == 0 else frame.add_paragraph()
-            paragraph.text = bullet
-            paragraph.level = 0
+    def bullets(slide, left, top, w, h, items, size=18, color=None, gap=10):
+        box = slide.shapes.add_textbox(left, top, w, h)
+        frame = box.text_frame
+        frame.word_wrap = True
+        for index, item in enumerate(items[:6]):
+            para = frame.paragraphs[0] if index == 0 else frame.add_paragraph()
+            para.text = item if index == 0 else f"\u2022  {item}"
+            if index == 0:
+                para.text = f"\u2022  {item}"
+            para.line_spacing = 1.3
+            para.space_after = Pt(gap)
+            run = para.runs[0]
+            run.font.size = Pt(size)
+            run.font.color.rgb = color or BODY
+            run.font.name = FONT
+        return box
 
-        notes = slide.get("speaker_notes")
-        if notes and str(notes).strip():
-            page.notes_slide.notes_text_frame.text = str(notes)
+    def footer(slide, number: int) -> None:
+        rect(slide, Inches(0.9), height - Inches(0.86), width - Inches(1.8), Pt(1), RGBColor(0xE2, 0xE8, 0xF0))
+        text(slide, Inches(0.9), height - Inches(0.72), Inches(9), Inches(0.3),
+             "Content Transformation Engine", 9, MUTED)
+        text(slide, width - Inches(1.7), height - Inches(0.72), Inches(0.8), Inches(0.3),
+             str(number), 9, MUTED, align=PP_ALIGN.RIGHT)
+
+    # ---------------------------------------------------------------- cover
+    title = _title_for(artefact_type, draft, content_model)
+    cover = prs.slides.add_slide(blank)
+    rect(cover, 0, 0, width, height, INK)
+    rect(cover, 0, 0, Inches(0.14), height, ACCENT)          # left accent spine
+    rect(cover, Inches(1.15), Inches(2.15), Inches(0.075), Inches(2.45), ACCENT)
+
+    text(cover, Inches(1.5), Inches(2.05), Inches(10.4), Inches(1.8), title, 40, WHITE, bold=True, spacing=1.05)
+    source_label = (content_model or {}).get("source_type") or "briefing"
+    text(cover, Inches(1.5), Inches(3.95), Inches(10.4), Inches(0.5),
+         f"Generated {artefact_type.replace('_', ' ')}  ·  {source_label}", 17,
+         RGBColor(0x9A, 0xA6, 0xB8))
+
+    if content_model and content_model.get("severity"):
+        severity = str(content_model["severity"]).upper()
+        pill = rect(cover, Inches(1.5), Inches(4.62), Inches(1.5), Inches(0.42), ACCENT)
+        pill.text_frame.word_wrap = False
+        para = pill.text_frame.paragraphs[0]
+        para.text = severity
+        para.alignment = PP_ALIGN.CENTER
+        run = para.runs[0]
+        run.font.size = Pt(12)
+        run.font.bold = True
+        run.font.color.rgb = WHITE
+        run.font.name = FONT
+        pill.text_frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+
+    text(cover, Inches(1.5), height - Inches(1.05), Inches(10), Inches(0.4),
+         "One source · one content model · every deliverable", 11, RGBColor(0x64, 0x74, 0x8B))
+
+    # --------------------------------------------------------------- slides
+    slides = draft.get("slides") or []
+    for index, slide_data in enumerate(slides, start=1):
+        if isinstance(slide_data, str):
+            slide_data = {"title": f"Slide {index}", "bullets": [slide_data]}
+
+        page = prs.slides.add_slide(blank)
+        rect(page, 0, 0, width, height, WHITE)
+
+        # eyebrow + title
+        eyebrow = (content_model or {}).get("source_type") or "briefing"
+        text(page, Inches(0.9), Inches(0.62), Inches(10), Inches(0.3),
+             f"{index:02d}   ·   {str(eyebrow).upper()}", 10, ACCENT, bold=True)
+        slide_title = str(slide_data.get("title") or f"Slide {index}")
+        text(page, Inches(0.9), Inches(1.02), Inches(11.2), Inches(0.9), slide_title, 30, INK, bold=True, spacing=1.05)
+        rect(page, Inches(0.9), Inches(1.95), Inches(1.2), Pt(3), ACCENT)
+
+        items = _as_list(slide_data.get("bullets"))
+        notes = str(slide_data.get("speaker_notes") or "").strip()
+
+        # A slide can come back from the model with a title and no bullets, which
+        # renders as a bare heading on a white page. Fall back to the speaker note
+        # so the slide carries content instead of looking broken.
+        used_notes_as_body = False
+        if not items and notes:
+            items = [notes]
+            used_notes_as_body = True
+
+        if items:
+            bullets(page, Inches(0.9), Inches(2.45), Inches(11.2), Inches(2.2), items)
+
+        if notes and not used_notes_as_body:
+            # The note is visible on the slide too, in a tinted rail, so a printed
+            # handout carries the presenter's context. Placed below the bullet area
+            # (which ends at 4.65") so it can never paint over the body text.
+            rail = rect(page, Inches(0.9), Inches(5.05), Inches(11.2), Inches(1.15), RGBColor(0xF4, 0xF7, 0xFB))
+            frame = rail.text_frame
+            frame.word_wrap = True
+            frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+            frame.margin_left = Inches(0.28)
+            frame.margin_right = Inches(0.28)
+            para = frame.paragraphs[0]
+            para.text = f"Speaker note — {notes}"
+            para.line_spacing = 1.25
+            run = para.runs[0]
+            run.font.size = Pt(11)
+            run.font.italic = True
+            run.font.color.rgb = MUTED
+            run.font.name = FONT
+
+            page.notes_slide.notes_text_frame.text = notes
+
+        footer(page, index)
 
     buffer = io.BytesIO()
     prs.save(buffer)
@@ -259,6 +594,8 @@ def render_payload(
         return render_pdf(artefact_type, draft, content_model), "bytes"
     if fmt == "pptx":
         return render_pptx(draft, content_model, artefact_type), "bytes"
+    if fmt == "png":
+        return render_infographic_png(draft, content_model, artefact_type), "bytes"
     raise ValueError(f"no renderer for format {fmt!r}")
 
 
@@ -295,6 +632,7 @@ def write_artefact_files(run_id: str, artefacts: dict, content_model: dict | Non
 
 
 __all__ = [
+    "render_infographic_png",
     "render_json",
     "render_linkedin_post",
     "render_markdown",

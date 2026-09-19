@@ -30,14 +30,14 @@ ARTEFACT_PROFILES = {
     "advisory": {
         "label": "Structured Security Advisory",
         "fields": ["severity", "executive_summary", "affected_systems", "details", "iocs", "mitigations", "references"],
-        "export_ext": "md",
-        "render_formats": ["md", "pdf"],
+        "export_ext": "pdf",
+        "render_formats": ["pdf"],
     },
     "executive_summary": {
         "label": "Executive Briefing",
         "fields": ["title", "summary", "key_points", "recommendations"],
-        "export_ext": "md",
-        "render_formats": ["md", "pdf"],
+        "export_ext": "pdf",
+        "render_formats": ["pdf"],
     },
     "linkedin_post": {
         "label": "LinkedIn Post",
@@ -55,19 +55,21 @@ ARTEFACT_PROFILES = {
         "label": "Presentation Slides + Speaker Notes",
         "fields": ["slides"],
         "export_ext": "pptx",
-        "render_formats": ["pptx", "json"],
+        "render_formats": ["pptx"],
     },
     "video_package": {
         "label": "Video Package",
         "fields": ["script", "storyboard", "scene_descriptions", "narration", "subtitles", "visual_recommendations"],
-        "export_ext": "srt",
-        "render_formats": ["json", "srt"],
+        # The production document an operator hands to a video team, plus the
+        # machine format a video player consumes.
+        "export_ext": "pdf",
+        "render_formats": ["pdf", "srt"],
     },
     "infographic": {
         "label": "Infographic Content + Layout",
         "fields": ["content", "layout_recommendations", "key_messaging"],
-        "export_ext": "md",
-        "render_formats": ["md", "json"],
+        "export_ext": "png",
+        "render_formats": ["png"],
     },
 }
 

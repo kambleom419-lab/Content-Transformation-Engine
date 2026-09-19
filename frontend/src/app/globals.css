@@ -3039,3 +3039,514 @@ body {
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   Artefact previews (components/artefact-previews.tsx)
+   Plain, readable representations of each deliverable — not platform clones.
+   Themed entirely from the --relay-* tokens so it follows the active shell.
+   ========================================================================== */
+
+.ap {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  color: var(--relay-primary);
+}
+
+.ap-empty {
+  color: var(--relay-muted);
+  font-size: 13px;
+}
+
+.ap-section-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--relay-muted);
+}
+
+.ap-p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.72;
+  color: var(--relay-secondary);
+  white-space: pre-wrap;
+}
+
+.ap-list {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.ap-list li {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--relay-secondary);
+}
+
+.ap-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ap-chip {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  padding: 4px 9px;
+  border-radius: 6px;
+  background: rgba(245, 245, 245, 0.06);
+  border: 1px solid var(--relay-border-strong);
+  color: var(--relay-primary);
+}
+
+.ap-pill {
+  align-self: flex-start;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 5px 12px;
+  border-radius: 20px;
+  background: rgba(148, 163, 184, 0.14);
+  color: var(--relay-secondary);
+}
+
+.ap-pill.critical { background: rgba(248, 113, 113, 0.16); color: #fca5a5; }
+.ap-pill.high     { background: rgba(251, 146, 60, 0.16);  color: #fdba74; }
+.ap-pill.medium   { background: rgba(251, 191, 36, 0.16);  color: #fcd34d; }
+.ap-pill.low      { background: rgba(96, 165, 250, 0.16);  color: #93c5fd; }
+
+/* post */
+.ap-post {
+  border: 1px solid var(--relay-border);
+  border-radius: 12px;
+  padding: 22px 24px;
+  background: var(--relay-card);
+}
+
+.ap-post-tag {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--relay-muted);
+  margin-bottom: 14px;
+}
+
+.ap-post-headline {
+  margin: 0 0 12px;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.4;
+  color: var(--relay-primary);
+}
+
+.ap-post-body {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.75;
+  color: var(--relay-secondary);
+  white-space: pre-wrap;
+}
+
+.ap-post-cta {
+  margin: 14px 0 0;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: var(--relay-primary);
+}
+
+.ap-hashtags {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+}
+
+.ap-hashtags span {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--relay-accent);
+}
+
+/* thread */
+.ap-thread {
+  gap: 0;
+}
+
+.ap-tweet {
+  display: flex;
+  gap: 14px;
+}
+
+.ap-tweet-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: none;
+}
+
+.ap-tweet-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  background: rgba(245, 245, 245, 0.08);
+  color: var(--relay-primary);
+  flex: none;
+}
+
+.ap-tweet-line {
+  flex: 1;
+  width: 2px;
+  background: var(--relay-border);
+  margin: 4px 0;
+}
+
+.ap-tweet-body {
+  padding-bottom: 18px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ap-tweet-body p {
+  margin: 0 0 7px;
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--relay-primary);
+  white-space: pre-wrap;
+}
+
+.ap-tweet-meta {
+  display: flex;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--relay-muted);
+}
+
+.ap-tweet-meta .over {
+  color: #fdba74;
+  font-weight: 700;
+}
+
+/* slides — each one rendered as a 16:9 frame, like a real slide on a light
+   surface (same treatment as the infographic poster) */
+.ap-slides {
+  gap: 20px;
+}
+
+.ap-slide-card {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.ap-slide-frame {
+  flex: 1;
+  min-width: 0;
+  aspect-ratio: 16 / 9;
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 8px;
+  background: #f8fafc;
+  padding: 26px 30px;
+  overflow: hidden;
+}
+
+.ap-slide-frame-inner {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.ap-slide-eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: #1d4ed8;
+}
+
+.ap-slide-frame h4 {
+  margin: 8px 0 0;
+  font-size: 19px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #0f172a;
+}
+
+.ap-slide-rule {
+  display: block;
+  width: 42px;
+  height: 3px;
+  margin: 12px 0 14px;
+  border-radius: 2px;
+  background: #1d4ed8;
+}
+
+.ap-slide-frame ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ap-slide-frame li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #334155;
+}
+
+.ap-slide-frame li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 7px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #1d4ed8;
+}
+
+.ap-slide-notes {
+  flex: none;
+  width: 200px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  font-style: italic;
+  color: var(--relay-muted);
+  border-left: 2px solid var(--relay-border-strong);
+  padding-left: 14px;
+}
+
+.ap-notes-label {
+  display: block;
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--relay-muted);
+  margin-bottom: 4px;
+}
+
+/* video */
+.ap-scenes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ap-scene {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--relay-card);
+  border: 1px solid var(--relay-border);
+}
+
+.ap-scene-num {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--relay-accent);
+  flex: none;
+}
+
+.ap-scene-text {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--relay-secondary);
+}
+
+.ap-subs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ap-sub {
+  display: flex;
+  gap: 12px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--relay-secondary);
+}
+
+.ap-sub-index {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 11.5px;
+  color: var(--relay-muted);
+  flex: none;
+  padding-top: 2px;
+}
+
+/* infographic poster — the poster itself is a white document, so it keeps its
+   own light surface (like a PDF page) and sits on the dark shell with a frame. */
+.ap-poster {
+  gap: 12px;
+}
+
+.ap-poster img {
+  width: 100%;
+  max-width: 460px;
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 8px;
+  display: block;
+}
+
+.ap-poster-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11.5px;
+  color: var(--relay-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.ap-notice {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 15px;
+  border-radius: 9px;
+  background: var(--relay-card);
+  border: 1px solid var(--relay-border);
+  font-size: 13px;
+  color: var(--relay-muted);
+}
+
+/* ==========================================================================
+   File preview (components/file-preview.tsx) — an eye icon opens a modal,
+   the way a print preview does.
+   ========================================================================== */
+
+.pv-eye {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid var(--relay-border-strong);
+  background: transparent;
+  color: var(--relay-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.pv-eye:hover {
+  color: var(--relay-primary);
+  border-color: var(--relay-primary);
+}
+
+.pv-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(0, 0, 0, 0.72);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+}
+
+.pv-modal {
+  width: min(1000px, 100%);
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--relay-card);
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--relay-border);
+}
+
+.pv-title {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12.5px;
+  color: var(--relay-primary);
+}
+
+.pv-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: 1px solid var(--relay-border-strong);
+  background: transparent;
+  color: var(--relay-secondary);
+  cursor: pointer;
+}
+
+.pv-close:hover {
+  color: var(--relay-primary);
+  border-color: var(--relay-primary);
+}
+
+.pv-body {
+  overflow: auto;
+  padding: 20px;
+  background: var(--relay-bg);
+}
+
+.pv-text {
+  margin: 0;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--relay-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.pv-image {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  max-height: 74vh;
+  border-radius: 8px;
+  border: 1px solid var(--relay-border-strong);
+}
+
+.pv-frame {
+  width: 100%;
+  height: 74vh;
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.pv-loading,
+.pv-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--relay-muted);
+}
+
+
