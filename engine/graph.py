@@ -9,11 +9,11 @@ from langgraph.types import Send, interrupt
 
 from engine.ingestion import ingest_sources
 from engine.llm import LLMProvider, StubAdapter
-from engine.recipes import ARTEFACT_PROFILES
+from engine.recipes import ARTEFACT_PROFILES, SCRIPT_SENSITIVE_FORMATS
 from engine.render import write_artefact_files
 from engine.state import EngineState
 from engine.understand import run_understand
-from engine.generate import run_generate_and_check
+from engine.generate import _flatten_text, run_generate_and_check
 
 WORD_RE = re.compile(r"[a-z0-9]{3,}")
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
@@ -101,7 +101,16 @@ def fan_out_affected(state: EngineState) -> list[Send]:
 
 def generate_and_check(state: EngineState, llm: LLMProvider) -> dict:
     artefact_type = state["artefact_type"]
-    params = {k: state["source_input"].get(k) for k in ("target_audience", "tone", "language")}
+    source_input = state["source_input"]
+    # Language may be chosen per artefact; anything unset falls back to the
+    # run-level value. This is what lets one deck be English while the post is
+    # Hindi in the same run.
+    languages = source_input.get("languages") or {}
+    params = {
+        "target_audience": source_input.get("target_audience"),
+        "tone": source_input.get("tone"),
+        "language": languages.get(artefact_type) or source_input.get("language"),
+    }
     result = run_generate_and_check(
         artefact_type=artefact_type,
         content_model=state["content_model"],
@@ -141,6 +150,25 @@ def apply_feedback(state: EngineState, llm: LLMProvider) -> dict:
     return {"content_model": content_model}
 
 
+def _needs_shaping(value) -> bool:
+    """
+    Characters that our PDF and poster renderers cannot draw.
+
+    Pillow and reportlab lay glyphs down one at a time, so Devanagari, Tamil,
+    Bengali and similar scripts render incorrectly even with a font installed.
+    Anything past Latin Extended-A is treated as needing a shaping engine.
+    """
+    return any(ord(ch) > 0x024F for ch in str(value))
+
+
+def _script_limited(artefact_type: str, draft: dict) -> bool:
+    """True when a pdf/png deliverable would be rendered from non-Latin text."""
+    formats = ARTEFACT_PROFILES[artefact_type].get("render_formats") or []
+    if not any(fmt in SCRIPT_SENSITIVE_FORMATS for fmt in formats):
+        return False
+    return any(_needs_shaping(value) for value in _flatten_text(list(draft.values())))
+
+
 def guardrails_render(state: EngineState) -> dict:
     run_id = state["source_input"].get("run_id") or state["source_input"].get("id") or "run"
 
@@ -171,7 +199,24 @@ def guardrails_render(state: EngineState) -> dict:
         "sources": [s.get("source_id") for s in state.get("sources", [])],
         "model": state["content_model"].get("title"),
     }
-    return {"export": export}
+
+    updates: dict = {"export": export}
+
+    # Say so rather than shipping a poster of empty boxes.
+    degraded = [
+        artefact_type
+        for artefact_type, draft in state["artefacts"].items()
+        if isinstance(draft, dict) and _script_limited(artefact_type, draft)
+    ]
+    if degraded:
+        source_input = dict(state["source_input"])
+        source_input["warnings"] = list(source_input.get("warnings") or []) + [
+            f"{', '.join(sorted(degraded))}: non-Latin text cannot be drawn in the PDF or poster "
+            "with the current renderers — the .txt and .pptx versions are unaffected"
+        ]
+        updates["source_input"] = source_input
+
+    return updates
 
 
 def build_graph(llm: LLMProvider | None = None) -> Any:

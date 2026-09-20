@@ -3726,5 +3726,47 @@ body {
   object-fit: contain;
 }
 
+/* ==========================================================================
+   Per-artefact language — appears under an output once it is selected
+   ========================================================================== */
+
+.relay-output-row {
+  display: flex;
+  flex-direction: column;
+}
+
+.relay-output-lang {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: -1px;
+  padding: 8px 12px 9px 34px;
+  border: 1px solid var(--relay-border);
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  background: rgba(245, 245, 245, 0.03);
+}
+
+.relay-output-lang > span {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--relay-muted);
+}
+
+.relay-output-lang select {
+  flex: 1;
+  max-width: 200px;
+  padding: 5px 8px;
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 6px;
+  background: var(--relay-card);
+  color: var(--relay-primary);
+  font-size: 12px;
+}
+
+
 
 

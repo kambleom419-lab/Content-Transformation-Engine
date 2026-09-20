@@ -106,3 +106,21 @@ export function listTemplates() {
 export function templatePreviewUrl(previewPath: string) {
   return `${BASE}${previewPath}`;
 }
+
+export interface LanguageOption {
+  code: string;
+  label: string;
+  latin: boolean;
+}
+
+/**
+ * Languages an artefact can be written in, plus which artefacts have a PDF or
+ * PNG deliverable that cannot draw non-Latin scripts.
+ */
+export function listLanguages() {
+  return request<{
+    languages: LanguageOption[];
+    script_limited_artefacts: string[];
+    note: string;
+  }>("/languages");
+}

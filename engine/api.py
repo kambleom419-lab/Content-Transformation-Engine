@@ -32,7 +32,7 @@ from engine.graph import build_graph
 from engine.jobs import AWAITING_REVIEW, COMPLETE, FAILED, RUNNING, JobRegistry, Run
 from engine.llm import StubAdapter
 from engine.providers import build_llm_provider
-from engine.recipes import ARTEFACT_PROFILES
+from engine.recipes import ARTEFACT_PROFILES, LANGUAGES, SCRIPT_SENSITIVE_FORMATS
 from engine.render import (
     DEFAULT_PPTX_TEMPLATE,
     PPTX_TEMPLATES,
@@ -281,6 +281,29 @@ def template_preview(template_key: str):
         media_type="image/png",
         headers={"Content-Disposition": f'inline; filename="{template_key}.png"'},
     )
+
+
+@app.get("/languages")
+def list_languages() -> dict:
+    """
+    Languages an artefact can be written in, and which of them the PDF/poster
+    renderers can actually draw. Non-Latin scripts are fine for .txt and .pptx —
+    where the model's text is used unchanged — but need a shaping engine that
+    Pillow and reportlab do not provide.
+    """
+    script_limited = sorted(
+        artefact_type
+        for artefact_type, profile in ARTEFACT_PROFILES.items()
+        if any(fmt in SCRIPT_SENSITIVE_FORMATS for fmt in (profile.get("render_formats") or []))
+    )
+    return {
+        "languages": LANGUAGES,
+        "script_limited_artefacts": script_limited,
+        "note": (
+            "Non-Latin languages render correctly in .txt and .pptx. Artefacts whose "
+            "deliverable is a PDF or PNG keep an English fallback for those files."
+        ),
+    }
 
 
 @app.post("/run", status_code=202)
