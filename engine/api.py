@@ -33,7 +33,12 @@ from engine.jobs import AWAITING_REVIEW, COMPLETE, FAILED, RUNNING, JobRegistry,
 from engine.llm import StubAdapter
 from engine.providers import build_llm_provider
 from engine.recipes import ARTEFACT_PROFILES
-from engine.render import render_payload
+from engine.render import (
+    DEFAULT_PPTX_TEMPLATE,
+    PPTX_TEMPLATES,
+    render_payload,
+    render_template_preview,
+)
 from engine.state import empty_state
 from engine.tracing import tracing_status
 from engine.usage import LEDGER
@@ -228,6 +233,56 @@ def reset_usage() -> dict:
     return {"status": "reset"}
 
 
+@app.get("/templates")
+def list_templates() -> dict:
+    """
+    Presentation templates with their palettes, so the UI can draw an accurate
+    miniature of each option rather than a generic placeholder.
+    """
+    def as_hex(triple) -> str:
+        return "#{:02X}{:02X}{:02X}".format(*triple)
+
+    return {
+        "default": DEFAULT_PPTX_TEMPLATE,
+        "templates": [
+            {
+                "key": key,
+                "label": template["label"],
+                "blurb": template["blurb"],
+                "cover": as_hex(template["cover_bg"]),
+                "cover_accent": as_hex(template["cover_accent"]),
+                "cover_sub": as_hex(template["cover_sub"]),
+                "slide": as_hex(template["slide_bg"]),
+                "ink": as_hex(template["ink"]),
+                "accent": as_hex(template["accent"]),
+                "note": as_hex(template["note_bg"]),
+                "top_bar": template["top_bar"],
+                "preview": f"/template-preview/{key}",
+            }
+            for key, template in PPTX_TEMPLATES.items()
+        ],
+    }
+
+
+@app.get("/template-preview/{template_key}")
+def template_preview(template_key: str):
+    """
+    A rendered sample of a template — real output with placeholder content, so an
+    operator sees what they are choosing before committing a run to it.
+    """
+    if template_key not in PPTX_TEMPLATES:
+        raise HTTPException(404, f"unknown template: {template_key}")
+    try:
+        data = render_template_preview(template_key)
+    except Exception as exc:
+        raise HTTPException(500, f"template preview failed: {type(exc).__name__}: {exc}")
+    return Response(
+        content=data,
+        media_type="image/png",
+        headers={"Content-Disposition": f'inline; filename="{template_key}.png"'},
+    )
+
+
 @app.post("/run", status_code=202)
 def start_run(request: RunRequest) -> dict:
     outputs = _validate_outputs(request.selected_outputs)
@@ -336,7 +391,11 @@ def preview_artefact(thread_id: str, artefact_type: str, ext: str | None = None)
         raise HTTPException(400, f"{artefact_type} does not render as .{fmt}")
 
     try:
-        payload, kind = render_payload(artefact_type, draft, fmt, run.snapshot.get("content_model") or {})
+        payload, kind = render_payload(
+            artefact_type, draft, fmt,
+            run.snapshot.get("content_model") or {},
+            run.snapshot.get("source_input") or {},
+        )
     except Exception as exc:
         raise HTTPException(500, f"preview render failed: {type(exc).__name__}: {exc}")
 

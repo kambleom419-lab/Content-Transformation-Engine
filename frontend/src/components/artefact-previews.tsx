@@ -1,7 +1,48 @@
 "use client";
 
+import { BadgeCheck, Bookmark, Eye, Heart, MessageCircle, MoreHorizontal, Repeat2, Share } from "lucide-react";
+import { useState } from "react";
 import { previewUrl } from "@/lib/api";
 import { fieldLabel, type Draft } from "@/lib/types";
+
+/**
+ * The identity shown on social previews. Edit here to change it everywhere —
+ * a preview is far more useful when it looks like a post this operator would
+ * actually publish.
+ */
+const POST_AUTHOR = {
+  name: "Om Kamble",
+  headline: "SIH 2026 · Content Transformation Engine",
+  handle: "omkamble",
+  avatar: "https://avatars.githubusercontent.com/u/239809590?v=4",
+};
+
+const LINKEDIN_LIMIT = 3000;
+const X_LIMIT = 280;
+
+function Avatar({ size = 40 }: { size?: number }) {
+  const [broken, setBroken] = useState(false);
+  const initials = POST_AUTHOR.name.split(" ").map((part) => part[0]).join("");
+
+  if (broken) {
+    return (
+      <span className="sp-avatar sp-avatar-fallback" style={{ width: size, height: size, fontSize: size / 2.6 }}>
+        {initials}
+      </span>
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="sp-avatar"
+      src={POST_AUTHOR.avatar}
+      alt={POST_AUTHOR.name}
+      width={size}
+      height={size}
+      onError={() => setBroken(true)}
+    />
+  );
+}
 
 /**
  * Per-artefact previews.
@@ -87,54 +128,118 @@ function DocumentPreview({ draft, severity }: { draft: Draft; severity?: string 
   );
 }
 
-/** A plain post card — LinkedIn / any social body. */
+/** A LinkedIn-style post: who posted it, the post itself, and its limits. */
 function PostPreview({ draft }: { draft: Draft }) {
   const headline = toItems(draft.headline ?? draft.title)[0] ?? "";
   const body = asText(draft.body ?? draft.summary ?? draft.content);
   const cta = toItems(draft.cta)[0];
   const hashtags = toItems(draft.hashtags);
+  const characters = [headline, body, cta].filter(Boolean).join("\n\n").length;
+  const over = characters > LINKEDIN_LIMIT;
 
   return (
     <div className="ap">
-      <div className="ap-post">
-        <div className="ap-post-tag">post preview</div>
-        {headline ? <h3 className="ap-post-headline">{headline}</h3> : null}
-        {body ? <p className="ap-post-body">{body}</p> : null}
-        {cta ? <p className="ap-post-cta">{cta}</p> : null}
-        {hashtags.length ? (
-          <div className="ap-hashtags">
-            {hashtags.map((tag, index) => (
-              <span key={index}>{tag.startsWith("#") ? tag : `#${tag}`}</span>
-            ))}
+      <article className="sp-post">
+        <header className="sp-head">
+          <Avatar />
+          <div className="sp-who">
+            <strong>{POST_AUTHOR.name}</strong>
+            <span>{POST_AUTHOR.headline}</span>
+            <span className="sp-when">now · visible to anyone</span>
           </div>
-        ) : null}
-      </div>
+          <span className="sp-channel">in</span>
+        </header>
+
+        <div className="sp-body">
+          {headline ? <h3>{headline}</h3> : null}
+          {body ? <p><RichText text={body} /></p> : null}
+          {cta ? <p className="sp-cta">{cta}</p> : null}
+          {hashtags.length ? (
+            <div className="sp-tags">
+              {hashtags.map((tag, index) => (
+                <span key={index}>{tag.startsWith("#") ? tag : `#${tag}`}</span>
+              ))}
+            </div>
+          ) : null}
+        </div>
+
+        <footer className="sp-foot">
+          <span>{characters.toLocaleString()} / {LINKEDIN_LIMIT.toLocaleString()} characters</span>
+          <span className={over ? "over" : "ok"}>{over ? "over the limit" : "within limit"}</span>
+        </footer>
+      </article>
     </div>
   );
 }
 
-/** A simple thread — numbered entries with a character count, no fake chrome. */
+/** Highlights #hashtags and @mentions the way the platforms do. */
+function RichText({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(\s+)/).map((part, index) =>
+        /^[#@][\w-]+$/.test(part) ? (
+          <span className="x-link" key={index}>{part}</span>
+        ) : (
+          <span key={index}>{part}</span>
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * An X post.
+ *
+ * Rendered as ONE post, the way X shows a post: avatar, name, verified tick,
+ * handle, menu, body, action row. A thread draft is represented by its opening
+ * post, with the remaining posts stated underneath rather than stacked as more
+ * cards — the full thread always exists in the exported .txt.
+ *
+ * Engagement counts are deliberately absent. This is an unpublished draft, and
+ * inventing "39K likes" would misrepresent it.
+ */
 function ThreadPreview({ draft }: { draft: Draft }) {
   const tweets = toItems(draft.tweets);
-  const total = tweets.length;
+  const post = tweets[0] ?? "";
+  const remaining = Math.max(0, tweets.length - 1);
+  const over = post.length > X_LIMIT;
 
   return (
-    <div className="ap ap-thread">
-      {tweets.map((tweet, index) => (
-        <div className="ap-tweet" key={index}>
-          <div className="ap-tweet-rail">
-            <span className="ap-tweet-num">{index + 1}</span>
-            {index < total - 1 ? <span className="ap-tweet-line" /> : null}
-          </div>
-          <div className="ap-tweet-body">
-            <p>{tweet}</p>
-            <div className="ap-tweet-meta">
-              <span>{index + 1} / {total}</span>
-              <span className={tweet.length > 280 ? "over" : ""}>{tweet.length} / 280</span>
-            </div>
+    <div className="ap">
+      <article className="x-post">
+        <div className="x-rail">
+          <Avatar size={40} />
+        </div>
+
+        <div className="x-main">
+          <header className="x-head">
+            <strong>{POST_AUTHOR.name}</strong>
+            <BadgeCheck size={15} className="x-verified" />
+            <span className="x-handle">@{POST_AUTHOR.handle}</span>
+            <span className="x-sep">·</span>
+            <span className="x-time">now</span>
+            <MoreHorizontal size={16} className="x-menu" />
+          </header>
+
+          <p className="x-text"><RichText text={post} /></p>
+
+          <footer className="x-actions">
+            <span className="x-act"><MessageCircle size={15} /></span>
+            <span className="x-act"><Repeat2 size={15} /></span>
+            <span className="x-act"><Heart size={15} /></span>
+            <span className="x-act"><Eye size={15} /></span>
+            <span className="x-act"><Bookmark size={15} /></span>
+            <span className="x-act"><Share size={15} /></span>
+          </footer>
+
+          <div className="x-meta">
+            <span className={over ? "over" : ""}>{post.length} / {X_LIMIT} characters</span>
+            {remaining > 0 ? (
+              <span>+{remaining} more post{remaining === 1 ? "" : "s"} in the exported thread</span>
+            ) : null}
           </div>
         </div>
-      ))}
+      </article>
     </div>
   );
 }

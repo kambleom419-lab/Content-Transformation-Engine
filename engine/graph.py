@@ -152,7 +152,10 @@ def guardrails_render(state: EngineState) -> dict:
         validated.append({"type": artefact_type, "valid": not missing, "missing_fields": missing, "sha256": digest})
 
     try:
-        files = write_artefact_files(run_id, state["artefacts"], state["content_model"])
+        # source_input carries the operator's render options (e.g. the deck template)
+        files = write_artefact_files(
+            run_id, state["artefacts"], state["content_model"], state["source_input"]
+        )
         render_error = None
     except Exception as exc:  # rendering is a filesystem boundary — never lose a finished run to it
         files = []

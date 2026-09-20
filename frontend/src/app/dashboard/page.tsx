@@ -4,6 +4,7 @@ import { Check, ChevronDown, File as FileIcon, FileImage, FileText, FileVideo, I
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
+import { TemplatePicker } from "@/components/template-picker";
 import { getRun, startRunWithFiles } from "@/lib/api";
 import type { RunStatus } from "@/lib/types";
 
@@ -38,6 +39,7 @@ export default function DashboardPage() {
   const [language, setLanguage] = useState("English");
   const [objective, setObjective] = useState("Inform");
   const [selected, setSelected] = useState<string[]>(["executive_summary"]);
+  const [template, setTemplate] = useState("classic");
   const [dragging, setDragging] = useState(false);
   const [status, setStatus] = useState<RunStatus | null>(null);
   const [error, setError] = useState("");
@@ -58,7 +60,7 @@ export default function DashboardPage() {
     try {
       const payload = {
         selected_outputs: selected,
-        params: { target_audience: audience, tone, language, communication_objective: objective },
+        params: { target_audience: audience, tone, language, communication_objective: objective, template },
         sources: source.trim() ? [{ kind: "text", text: source.trim(), id: "pasted-source" }] : [],
         label: files[0]?.name ?? (source.trim() ? "pasted source" : ""),
       };
@@ -86,6 +88,7 @@ export default function DashboardPage() {
 
   const primaryLabel = files[0]?.name ?? (source.trim() ? "pasted source" : "");
   const primaryExt = files[0]?.name.split(".").pop()?.toLowerCase() ?? "";
+  const usesTemplate = selected.includes("presentation") || selected.includes("infographic");
   const FileTypeIcon = ["png", "jpg", "jpeg", "webp"].includes(primaryExt) ? FileImage : ["mp4", "mov", "webm"].includes(primaryExt) ? FileVideo : primaryExt ? FileText : FileIcon;
 
   return <main className="relay-shell relative overflow-hidden"><AppSidebar />
@@ -113,7 +116,7 @@ export default function DashboardPage() {
           <div className="relay-panel relay-source-panel"><div className="relay-panel-header"><div><span className="relay-index">02</span><h2>Source content</h2></div><span className="relay-character-count">{source.length} / 10,000</span></div><textarea value={source} onChange={(event) => setSource(event.target.value.slice(0, 10000))} placeholder="// paste source material or add working notes..." /><div className="relay-editor-footer"><span>Plain text input is processed alongside uploaded material.</span><span>markdown supported</span></div></div>
           <div className="relay-panel relay-config-panel"><div className="relay-panel-header"><div><span className="relay-index">03</span><h2>Configuration</h2></div><Settings2 size={15} className="relay-muted-icon" /></div><p className="relay-panel-description">Set the intended audience, voice, language, and purpose for this run.</p><div className="relay-fields"><SelectField label="Audience" value={audience} onChange={setAudience} options={["Executive", "Citizen", "Analyst", "Student", "Government communications"]} /><SelectField label="Tone" value={tone} onChange={setTone} options={["Professional", "Formal", "Technical", "Simplified"]} /><SelectField label="Language" value={language} onChange={setLanguage} options={["English", "Hindi"]} /><SelectField label="Content objective" value={objective} onChange={setObjective} options={["Inform", "Advise", "Summarize", "Promote"]} /></div></div>
         </section>
-        <aside className="relay-output-column"><div className="relay-panel relay-output-panel"><div className="relay-panel-header"><div><span className="relay-index">04</span><h2>Output formats</h2></div><span className="relay-count">{selected.length}</span></div><p className="relay-panel-description">Select one or more deliverables to prepare from this source.</p><div className="relay-output-list">{OUTPUT_OPTIONS.map(({ type, label, detail, icon: Icon }) => { const isSelected = selected.includes(type); return <button className={`relay-output-option ${isSelected ? "selected" : ""}`} type="button" key={type} aria-pressed={isSelected} onClick={() => toggleOutput(type)}><span className="relay-output-icon"><Icon size={15} /></span><span className="relay-output-copy"><strong>{label}</strong><small>{detail}</small></span><span className="relay-checkbox">{isSelected ? <Check size={12} /> : ""}</span></button>; })}</div></div><div className="relay-panel relay-summary-panel"><div className="relay-panel-header"><h2>Run context</h2><MoreHorizontal size={15} className="relay-muted-icon" /></div><div className="relay-summary-row"><span>source</span><strong>{primaryLabel || "awaiting input"}</strong></div><div className="relay-summary-row"><span>audience</span><strong>{audience}</strong></div><div className="relay-summary-row"><span>objective</span><strong>{objective}</strong></div><div className="relay-summary-row"><span>language</span><strong>{language}</strong></div></div>{error && <div className="relay-panel relay-error-panel"><strong>Run failed</strong><p>{error}</p></div>}<button className="relay-generate" type="button" onClick={generate} disabled={busy || (!files.length && !source.trim()) || selected.length === 0}>{busy ? <><RefreshSpinner /> Generating…</> : <><Play size={14} fill="currentColor" /> Generate deliverables <span>↵</span></>}</button><div className="relay-shortcut"><span>secure execution</span><span>{selected.length} output{selected.length === 1 ? "" : "s"}</span></div></aside>
+        <aside className="relay-output-column"><div className="relay-panel relay-output-panel"><div className="relay-panel-header"><div><span className="relay-index">04</span><h2>Output formats</h2></div><span className="relay-count">{selected.length}</span></div><p className="relay-panel-description">Select one or more deliverables to prepare from this source.</p><div className="relay-output-list">{OUTPUT_OPTIONS.map(({ type, label, detail, icon: Icon }) => { const isSelected = selected.includes(type); return <button className={`relay-output-option ${isSelected ? "selected" : ""}`} type="button" key={type} aria-pressed={isSelected} onClick={() => toggleOutput(type)}><span className="relay-output-icon"><Icon size={15} /></span><span className="relay-output-copy"><strong>{label}</strong><small>{detail}</small></span><span className="relay-checkbox">{isSelected ? <Check size={12} /> : ""}</span></button>; })}</div></div><div className="relay-panel relay-template-panel"><div className="relay-panel-header"><div><span className="relay-index">05</span><h2>Template</h2></div><span className="relay-panel-meta">{usesTemplate ? "in use" : "optional"}</span></div><p className="relay-panel-description">{usesTemplate ? "Applies to the deck and the poster. Pick a look by seeing it — the eye opens a sample full size." : "Applies to the Presentation deck and the Infographic poster. Pick one now, then tick Presentation or Infographic above to use it."}</p><TemplatePicker value={template} onChange={setTemplate} /></div><div className="relay-panel relay-summary-panel"><div className="relay-panel-header"><h2>Run context</h2><MoreHorizontal size={15} className="relay-muted-icon" /></div><div className="relay-summary-row"><span>source</span><strong>{primaryLabel || "awaiting input"}</strong></div><div className="relay-summary-row"><span>audience</span><strong>{audience}</strong></div><div className="relay-summary-row"><span>objective</span><strong>{objective}</strong></div><div className="relay-summary-row"><span>language</span><strong>{language}</strong></div>{usesTemplate ? <div className="relay-summary-row"><span>template</span><strong>{template}</strong></div> : null}</div>{error && <div className="relay-panel relay-error-panel"><strong>Run failed</strong><p>{error}</p></div>}<button className="relay-generate" type="button" onClick={generate} disabled={busy || (!files.length && !source.trim()) || selected.length === 0}>{busy ? <><RefreshSpinner /> Generating…</> : <><Play size={14} fill="currentColor" /> Generate deliverables <span>↵</span></>}</button><div className="relay-shortcut"><span>secure execution</span><span>{selected.length} output{selected.length === 1 ? "" : "s"}</span></div></aside>
       </div>
     </div>
   </section></main>;

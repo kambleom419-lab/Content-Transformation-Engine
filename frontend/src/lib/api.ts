@@ -79,3 +79,30 @@ export function downloadUrl(threadId: string, artefactType: string, ext?: string
 export function previewUrl(threadId: string, artefactType: string, ext?: string) {
   return `${BASE}/run/${threadId}/preview/${artefactType}${ext ? `?ext=${ext}` : ""}`;
 }
+
+export interface TemplateOption {
+  key: string;
+  label: string;
+  blurb: string;
+  cover: string;
+  cover_accent: string;
+  cover_sub: string;
+  slide: string;
+  ink: string;
+  accent: string;
+  note: string;
+  top_bar: boolean;
+  preview: string;
+}
+
+/**
+ * Design templates. The API also returns each template's palette, but the
+ * rendered `preview` image is what actually shows the operator what they get.
+ */
+export function listTemplates() {
+  return request<{ default: string; templates: TemplateOption[] }>("/templates");
+}
+
+export function templatePreviewUrl(previewPath: string) {
+  return `${BASE}${previewPath}`;
+}

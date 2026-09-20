@@ -75,6 +75,54 @@ ARTEFACT_PROFILES = {
 
 PARAM_KEYS = ["target_audience", "tone", "language", "level_of_detail", "communication_objective", "content_style"]
 
+# Languages offered per artefact.
+#
+# `latin: True` means the PDF and PNG renderers can draw it with the fonts those
+# libraries carry. Everything else is fine for .txt and .pptx — which is where
+# the model's text goes unchanged — but needs a shaping engine for PDF/poster
+# output, and Pillow and reportlab do not shape complex scripts.
+LANGUAGES = [
+    {"code": "English", "label": "English", "latin": True},
+    {"code": "Hindi", "label": "हिन्दी (Hindi)", "latin": False},
+    {"code": "Marathi", "label": "मराठी (Marathi)", "latin": False},
+    {"code": "Bengali", "label": "বাংলা (Bengali)", "latin": False},
+    {"code": "Tamil", "label": "தமிழ் (Tamil)", "latin": False},
+    {"code": "Telugu", "label": "తెలుగు (Telugu)", "latin": False},
+    {"code": "Kannada", "label": "ಕನ್ನಡ (Kannada)", "latin": False},
+    {"code": "Gujarati", "label": "ગુજરાતી (Gujarati)", "latin": False},
+    {"code": "Punjabi", "label": "ਪੰਜਾਬੀ (Punjabi)", "latin": False},
+    {"code": "Urdu", "label": "اردو (Urdu)", "latin": False},
+    {"code": "French", "label": "Français", "latin": True},
+    {"code": "German", "label": "Deutsch", "latin": True},
+    {"code": "Spanish", "label": "Español", "latin": True},
+]
+
+# Formats whose renderer draws the glyphs itself, so it is limited to scripts
+# our bundled fonts and shaping support can handle.
+SCRIPT_SENSITIVE_FORMATS = {"pdf", "png"}
+
+
+def is_latin_language(name: str | None) -> bool:
+    if not name:
+        return True
+    wanted = str(name).strip().lower()
+    for entry in LANGUAGES:
+        if entry["code"].lower() == wanted or entry["label"].lower() == wanted:
+            return bool(entry["latin"])
+    return True  # unknown language: assume ascii-safe rather than blocking it
+
+
+def language_rule(language: str | None) -> str:
+    """An explicit instruction, not just a parameter in a list."""
+    name = str(language or "").strip()
+    if not name or name.lower() in ("english", "en"):
+        return ""
+    return (
+        f"- Write every field in {name}. Keep names, product and version numbers, "
+        f"CVE identifiers, IP addresses, hashes and URLs exactly as they appear in "
+        f"the content model — do not translate or transliterate them.\n"
+    )
+
 
 UNDERSTAND_INSTRUCTIONS = """You are an intelligence content analyst. Analyse the source corpus below and build the structured content model for it.
 
@@ -180,6 +228,7 @@ def build_generation_prompt(artefact_type: str, content_model: dict, params: dic
         f"Generation parameters: {param_line}\n"
         "Rules:\n"
         "- Use ONLY facts from the content model. Never invent numbers, dates or IoCs.\n"
+        f"{language_rule(params.get('language'))}"
         "- Return a single JSON object only (no markdown fences, no commentary).\n"
         f"- Required keys: {', '.join(profile['fields'])}.\n"
         "- Include the requested structure (e.g. video: script/storyboard/scenes/narration/"
