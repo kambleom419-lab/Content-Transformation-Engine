@@ -33,7 +33,6 @@ coverage/
 /artefacts/
 
 # Local scratch — not for the shared repo
-/README.md
 /docs/
 /samples/
 /demo.py
