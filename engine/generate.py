@@ -14,6 +14,7 @@ from engine.llm_utils import (
     DEFAULT_MAX_ATTEMPTS,
     MIN_TOKEN_OVERLAP_FOR_GROUNDING,
     generate_json_with_retry,
+    normalise_tree,
     tokens,
 )
 from engine.recipes import ARTEFACT_PROFILES, build_generation_prompt
@@ -291,4 +292,4 @@ def run_generate_and_check(
         "unverified_iocs": [f["claim"] for f in ioc_flags],
     }
 
-    return {"draft": draft, "verdicts": verdicts, "meta": meta}
+    return {"draft": normalise_tree(draft), "verdicts": verdicts, "meta": meta}

@@ -3253,6 +3253,49 @@ body {
   font-weight: 700;
 }
 
+/* hand-off to the platform — the operator still presses Post */
+.x-handoff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--relay-border);
+}
+
+.x-open,
+.x-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: opacity 0.15s ease;
+}
+
+.x-open {
+  background: #eff3f4;
+  color: #0f1419;
+  border: 1px solid #eff3f4;
+}
+
+.x-open:hover { opacity: 0.86; }
+
+.x-copy {
+  background: transparent;
+  color: var(--relay-secondary);
+  border: 1px solid var(--relay-border-strong);
+}
+
+.x-copy:hover {
+  color: var(--relay-primary);
+  border-color: var(--relay-primary);
+}
+
 /* slides — each one rendered as a 16:9 frame, like a real slide on a light
    surface (same treatment as the infographic poster) */
 .ap-slides {

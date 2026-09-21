@@ -37,6 +37,31 @@ def tokens(text: str) -> set[str]:
     return {word for word in WORD_RE.findall((text or "").lower()) if word not in STOPWORDS}
 
 
+# Models routinely substitute typographic look-alikes inside identifiers —
+# "CVE‑2026‑4417" with a NON-BREAKING HYPHEN (U+2011) rather than "-". The text
+# looks correct on screen but will not match official records, and it breaks
+# copy-paste lookups. Normalise the hyphen family only; en and em dashes are
+# left alone because they are legitimate prose punctuation.
+_HYPHEN_LOOKALIKES = str.maketrans(
+    {"\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2212": "-", "\u2043": "-"}
+)
+
+
+def normalise_identifiers(text: str) -> str:
+    return str(text).translate(_HYPHEN_LOOKALIKES)
+
+
+def normalise_tree(value):
+    """Apply identifier normalisation through a nested draft structure."""
+    if isinstance(value, str):
+        return normalise_identifiers(value)
+    if isinstance(value, list):
+        return [normalise_tree(item) for item in value]
+    if isinstance(value, dict):
+        return {key: normalise_tree(item) for key, item in value.items()}
+    return value
+
+
 def dedupe_strings(items: list[str]) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []

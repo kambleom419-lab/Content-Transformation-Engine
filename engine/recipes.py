@@ -193,7 +193,12 @@ def _as_str_list(value) -> list[str]:
 
 
 def repair_content_model(model: dict | None, fallback_source_type: str = "report", fallback_language: str = "en") -> dict:
-    model = dict(model or {})
+    from engine.llm_utils import normalise_tree
+
+    # Normalise identifier look-alikes (e.g. CVE-2026-4417 written with a
+    # non-breaking hyphen) so every downstream artefact carries a CVE that
+    # actually matches official records.
+    model = normalise_tree(dict(model or {}))
     model["title"] = str(model.get("title") or "").strip()
 
     severity = str(model.get("severity") or "").strip().lower()

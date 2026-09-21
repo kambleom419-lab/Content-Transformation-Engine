@@ -1,6 +1,6 @@
 "use client";
 
-import { BadgeCheck, Bookmark, Eye, Heart, MessageCircle, MoreHorizontal, Repeat2, Share } from "lucide-react";
+import { BadgeCheck, Bookmark, Check, Copy, ExternalLink, Eye, Heart, MessageCircle, MoreHorizontal, Repeat2, Share } from "lucide-react";
 import { useState } from "react";
 import { previewUrl } from "@/lib/api";
 import { fieldLabel, type Draft } from "@/lib/types";
@@ -13,7 +13,7 @@ import { fieldLabel, type Draft } from "@/lib/types";
 const POST_AUTHOR = {
   name: "Om Kamble",
   headline: "SIH 2026 · Content Transformation Engine",
-  handle: "omkamble",
+  handle: "OmKamble49012",
   avatar: "https://avatars.githubusercontent.com/u/239809590?v=4",
 };
 
@@ -172,6 +172,24 @@ function PostPreview({ draft }: { draft: Draft }) {
   );
 }
 
+/** Copy helper — the practical half of "hand this to the platform". */
+function CopyToClipboard({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="x-copy"
+      onClick={async () => {
+        await navigator.clipboard?.writeText(text);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1600);
+      }}
+    >
+      {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : label}
+    </button>
+  );
+}
+
 /** Highlights #hashtags and @mentions the way the platforms do. */
 function RichText({ text }: { text: string }) {
   return (
@@ -238,6 +256,28 @@ function ThreadPreview({ draft }: { draft: Draft }) {
               <span>+{remaining} more post{remaining === 1 ? "" : "s"} in the exported thread</span>
             ) : null}
           </div>
+
+          {/*
+            X's official Web Intent: opens the composer with the post prefilled.
+            No API key, no OAuth, no cost — and the operator still presses Post,
+            which is the whole point of the review gate.
+            Only offered when the post fits, because X refuses to prefill text
+            that would exceed 280 characters and the operator would have to edit
+            it by hand anyway.
+          */}
+          {!over && post ? (
+            <div className="x-handoff">
+              <a
+                className="x-open"
+                href={`https://x.com/intent/tweet?text=${encodeURIComponent(post)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <ExternalLink size={13} /> Open in X to post
+              </a>
+              <CopyToClipboard text={tweets.join("\n\n")} label="Copy full thread" />
+            </div>
+          ) : null}
         </div>
       </article>
     </div>

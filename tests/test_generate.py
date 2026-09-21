@@ -231,3 +231,24 @@ def test_factual_numbers_are_still_captured():
     assert numbers("upgrade to version 3.2.1") == {"3.2.1"}
     assert numbers("exploited in 2026") == {"2026"}
     assert numbers("affecting 1,000 hosts") == {"1,000"}
+
+
+def test_identifier_lookalikes_are_normalised():
+    """Models write CVEs with a non-breaking hyphen, which will not match
+    official records or survive a copy-paste search."""
+    from engine.llm_utils import normalise_identifiers
+
+    assert normalise_identifiers("CVE\u20112026\u20114417") == "CVE-2026-4417"
+    assert normalise_identifiers("CVE\u20102026\u20104417") == "CVE-2026-4417"
+    # an em dash in prose is legitimate punctuation and must survive
+    assert normalise_identifiers("patch now \u2014 urgently") == "patch now \u2014 urgently"
+    assert normalise_identifiers("3.2.1") == "3.2.1"
+
+
+def test_generated_draft_has_normalised_identifiers():
+    draft = {**GOOD_DRAFT, "body": GOOD_DRAFT["body"] + " Track CVE\u20112024\u201131337 now."}
+    llm = FakeLLM([draft])
+    result = run_generate_and_check("linkedin_post", CONTENT_MODEL, CORPUS, llm=llm, min_support_ratio=0.0)
+
+    assert "CVE-2024-31337" in result["draft"]["body"]
+    assert "\u2011" not in result["draft"]["body"]
