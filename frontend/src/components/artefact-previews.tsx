@@ -4,6 +4,7 @@ import { BadgeCheck, Bookmark, Check, Copy, ExternalLink, Eye, Heart, MessageCir
 import { useState } from "react";
 import { previewUrl } from "@/lib/api";
 import { fieldLabel, type Draft } from "@/lib/types";
+import { normalizeXHandle, useXAccount } from "@/lib/x-account";
 
 /**
  * The identity shown on social previews. Edit here to change it everywhere —
@@ -213,6 +214,10 @@ function RichText({ text }: { text: string }) {
  * post, with the remaining posts stated underneath rather than stacked as more
  * cards — the full thread always exists in the exported .txt.
  *
+ * The handle is the operator's own, remembered in this browser (see
+ * `lib/x-account`) rather than hardcoded — the preview should look like a post
+ * this operator would publish, from the account they would publish it from.
+ *
  * Engagement counts are deliberately absent. This is an unpublished draft, and
  * inventing "39K likes" would misrepresent it.
  */
@@ -221,6 +226,23 @@ function ThreadPreview({ draft }: { draft: Draft }) {
   const post = tweets[0] ?? "";
   const remaining = Math.max(0, tweets.length - 1);
   const over = post.length > X_LIMIT;
+
+  const [account, setAccount] = useXAccount();
+  const [entry, setEntry] = useState("");
+  const handle = normalizeXHandle(account) || POST_AUTHOR.handle;
+  const hasAccount = normalizeXHandle(account).length > 0;
+
+  const composer = `https://x.com/intent/tweet?text=${encodeURIComponent(post)}`;
+
+  // Ask for the account, remember it, then hand off to X's composer. The
+  // composer opens signed in as whichever account the browser already has, so
+  // the operator still presses Post — the review gate is never bypassed.
+  const openComposer = () => {
+    const clean = normalizeXHandle(entry);
+    if (!clean) return;
+    setAccount(clean);
+    window.open(composer, "_blank", "noopener,noreferrer");
+  };
 
   return (
     <div className="ap">
@@ -233,7 +255,7 @@ function ThreadPreview({ draft }: { draft: Draft }) {
           <header className="x-head">
             <strong>{POST_AUTHOR.name}</strong>
             <BadgeCheck size={15} className="x-verified" />
-            <span className="x-handle">@{POST_AUTHOR.handle}</span>
+            <span className="x-handle">@{handle}</span>
             <span className="x-sep">·</span>
             <span className="x-time">now</span>
             <MoreHorizontal size={16} className="x-menu" />
@@ -267,14 +289,49 @@ function ThreadPreview({ draft }: { draft: Draft }) {
           */}
           {!over && post ? (
             <div className="x-handoff">
-              <a
-                className="x-open"
-                href={`https://x.com/intent/tweet?text=${encodeURIComponent(post)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                <ExternalLink size={13} /> Open in X to post
-              </a>
+              {hasAccount ? (
+                <>
+                  <a
+                    className="x-open"
+                    href={composer}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <ExternalLink size={13} /> Open in X to post
+                  </a>
+                  <a
+                    className="x-account"
+                    href={`https://x.com/${handle}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title="Change the account above, or open this one on X"
+                  >
+                    posting as @{handle}
+                  </a>
+                </>
+              ) : (
+                <form
+                  className="x-ask"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    openComposer();
+                  }}
+                >
+                  <span className="x-ask-label">Which X account?</span>
+                  <input
+                    value={entry}
+                    onChange={(event) => setEntry(event.target.value)}
+                    placeholder="@handle or x.com/handle"
+                    aria-label="Your X account"
+                    spellCheck={false}
+                    autoComplete="off"
+                    autoFocus
+                  />
+                  <button className="x-open" type="submit" disabled={!normalizeXHandle(entry)}>
+                    <ExternalLink size={13} /> Save &amp; open in X
+                  </button>
+                </form>
+              )}
               <CopyToClipboard text={tweets.join("\n\n")} label="Copy full thread" />
             </div>
           ) : null}

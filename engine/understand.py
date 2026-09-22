@@ -47,6 +47,21 @@ _DOMAIN_STOPWORDS = {
     "e.g.com", "i.e.com", "etc.com", "fig.com", "vs.com", "no.com",
 }
 
+# Real TLDs only. PDF table extraction glues cells together, producing strings
+# like "minutes.Thetraveltimesused" — the domain pattern matches these happily
+# because ".The" looks like a TLD. Requiring a plausible TLD drops them.
+_COMMON_TLDS = frozenset(
+    """
+    com org net edu gov mil int io co ai app dev cloud tech info biz online site xyz
+    me tv uk de fr jp cn in au ca br ru it nl se no es ch at be dk fi pl cz gr pt ie
+    nz za sg hk kr tw th vn id ph my mx ar cl pe tr il sa ae pk bd lk np
+    """.split()
+)
+
+
+def _plausible_domain(value: str) -> bool:
+    return value.rsplit(".", 1)[-1].lower() in _COMMON_TLDS
+
 
 def extract_iocs_regex(text: str) -> list[str]:
     """Deterministic IOC extraction used as a safety net alongside the model."""
@@ -66,13 +81,15 @@ def extract_iocs_regex(text: str) -> list[str]:
     def _in_consumed(pos: int) -> bool:
         return any(start <= pos < end for start, end in consumed_spans)
 
-    for _, pattern in ((k, p) for k, p in IOC_PATTERNS if k in ("ipv4", "domain")):
+    for kind, pattern in ((k, p) for k, p in IOC_PATTERNS if k in ("ipv4", "domain")):
         for m in pattern.finditer(text):
             if _in_consumed(m.start()):
                 continue
             value = m.group(0).rstrip(".,;:)")
             key = value.lower()
             if key in _DOMAIN_STOPWORDS or key in seen:
+                continue
+            if kind == "domain" and not _plausible_domain(value):
                 continue
             seen.add(key)
             found.append(value)

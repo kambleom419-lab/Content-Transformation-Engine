@@ -32,6 +32,11 @@ NUMBER_RE = re.compile(r"(\d+(?:[.,]\d+)*)\s*(" + NUMBER_UNITS + r")?", re.IGNOR
 MIN_SUPPORT_RATIO = 0.6
 MAX_REGENERATION_PASSES = 1
 
+# X's Web Intent refuses to prefill a post longer than 280 characters, so an
+# over-long tweet silently loses the "open in X" redirect. The prompt asks the
+# model to stay inside the limit; this enforces it when the model overshoots.
+X_TWEET_LIMIT = 280
+
 _ARRAY_FIELDS = {
     "affected_systems", "iocs", "mitigations", "references",
     "key_points", "recommendations", "hashtags", "tweets",
@@ -61,6 +66,31 @@ def build_artefact_json_schema(artefact_type: str) -> dict:
         else:
             properties[field_name] = {"type": "string"}
     return {"type": "object", "properties": properties, "required": profile["fields"]}
+
+
+def clamp_tweet(text: str, limit: int = X_TWEET_LIMIT) -> str:
+    """
+    Hold one tweet inside X's character limit.
+
+    Clamping happens at a word boundary and marks the cut with an ellipsis, so
+    the post stays readable and the "open in X" redirect keeps working. Only the
+    final tweet that overflows is shortened; the thread keeps every other post.
+    """
+    text = str(text).strip()
+    if len(text) <= limit:
+        return text
+    clipped = text[: limit - 1].rstrip()
+    space = clipped.rfind(" ")
+    if space > 0:
+        clipped = clipped[:space].rstrip()
+    return f"{clipped}…"
+
+
+def _clamp_x_thread(draft: dict) -> dict:
+    tweets = draft.get("tweets")
+    if isinstance(tweets, list):
+        draft = {**draft, "tweets": [clamp_tweet(tweet) for tweet in tweets]}
+    return draft
 
 
 def _flatten_text(value: Any) -> list[str]:
@@ -252,6 +282,9 @@ def run_generate_and_check(
         fields_repaired = True
         missing = _missing_fields(draft, profile["fields"])
 
+    if artefact_type == "x_thread":
+        draft = _clamp_x_thread(draft)
+
     fact_check = fact_check_draft(draft, corpus)
     regenerated = False
 
@@ -261,6 +294,8 @@ def run_generate_and_check(
             llm, artefact_type, content_model, params, unsupported_claims, max_attempts
         )
         new_draft = {k: new_raw.get(k) for k in profile["fields"] if new_raw.get(k) is not None}
+        if artefact_type == "x_thread":
+            new_draft = _clamp_x_thread(new_draft)
         new_fact_check = fact_check_draft(new_draft, corpus)
 
         if new_fact_check.support_ratio > fact_check.support_ratio:

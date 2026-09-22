@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Architecture — Gen AI Platform for Automated Content Transformation</title>
+<style>
+  @page { size: A4; margin: 0; }
+
+  :root {
+    --ink: #0F172A;
+    --body: #334155;
+    --muted: #64748B;
+    --faint: #94A3B8;
+    --accent: #1D4ED8;
+    --accent-soft: #EFF4FF;
+    --verify: #047857;
+    --rule: #E2E8F0;
+    --surface: #F8FAFC;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: "Segoe UI", -apple-system, system-ui, sans-serif;
+    color: var(--body);
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .page {
+    width: 210mm;
+    height: 297mm;
+    padding: 13mm 14mm 11mm;
+    background: #fff;
+    page-break-after: always;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .page:last-child { page-break-after: auto; }
+
+  /* ── masthead ─────────────────────────────────────────── */
+  .masthead {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    padding-bottom: 6mm; border-bottom: 2px solid var(--ink);
+  }
+  .masthead h1 { font-size: 19pt; font-weight: 700; letter-spacing: -0.02em; color: var(--ink); line-height: 1.12; }
+  .masthead .sub { margin-top: 2mm; font-size: 9.5pt; color: var(--muted); }
+  .masthead .meta {
+    text-align: right; font-size: 8pt; line-height: 1.6;
+    color: var(--faint); text-transform: uppercase; letter-spacing: 0.09em; white-space: nowrap;
+  }
+  .masthead .meta b { color: var(--accent); }
+
+  /* ── sections ─────────────────────────────────────────── */
+  section { margin-top: 6mm; }
+  h2 {
+    font-size: 8pt; font-weight: 700; letter-spacing: 0.14em;
+    text-transform: uppercase; color: var(--accent);
+    padding-bottom: 1.5mm; margin-bottom: 3mm; border-bottom: 1px solid var(--rule);
+  }
+  p { font-size: 9pt; line-height: 1.55; }
+  p + p { margin-top: 2mm; }
+  strong { color: var(--ink); font-weight: 650; }
+
+  ul { list-style: none; }
+  li { font-size: 9pt; line-height: 1.5; padding-left: 4.5mm; position: relative; margin-bottom: 1.2mm; }
+  li::before { content: "\25B8"; position: absolute; left: 0; color: var(--accent); }
+
+  /* ── diagram ──────────────────────────────────────────── */
+  .diagram {
+    display: grid; grid-template-columns: 1fr 34px 1.25fr 34px 1.15fr;
+    align-items: center; gap: 0; margin: 1mm 0 2mm;
+  }
+  .col-label {
+    font-size: 7pt; font-weight: 700; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--faint); margin-bottom: 2mm;
+  }
+  .stack { display: flex; flex-direction: column; gap: 1.5mm; }
+  .chip {
+    display: flex; align-items: center; gap: 2.5mm;
+    padding: 2.2mm 3mm; border: 1px solid var(--rule);
+    border-radius: 2mm; font-size: 8.5pt; color: var(--body); background: #fff;
+  }
+  .chip i { width: 1.8mm; height: 1.8mm; border-radius: 50%; background: var(--accent); flex: none; }
+  .arrow { display: grid; place-items: center; color: var(--accent); font-size: 13pt; }
+
+  .core {
+    border: 1.6px solid var(--accent); border-radius: 2.5mm;
+    background: linear-gradient(180deg, var(--accent-soft) 0%, #fff 80%);
+    padding: 4mm 4.5mm; text-align: center;
+  }
+  .core .kicker { font-size: 7pt; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--accent); }
+  .core h3 { margin-top: 1.5mm; font-size: 13pt; font-weight: 700; color: var(--ink); letter-spacing: -0.015em; }
+  .core p { margin-top: 2mm; font-size: 8.3pt; line-height: 1.5; }
+  .fields { margin-top: 3mm; display: flex; flex-wrap: wrap; gap: 1.2mm; justify-content: center; }
+  .fields span {
+    font-family: ui-monospace, Consolas, monospace; font-size: 7pt;
+    padding: 1mm 1.6mm; border: 1px solid var(--rule); border-radius: 1.2mm; background: #fff; color: var(--body);
+  }
+
+  .review {
+    margin-top: 3mm; border: 1px solid var(--rule); border-radius: 2mm;
+    background: var(--surface); padding: 2.5mm 3.5mm;
+    display: flex; align-items: center; gap: 3mm;
+  }
+  .review .dot { width: 2mm; height: 2mm; border-radius: 50%; background: #B45309; flex: none; }
+  .review .txt { font-size: 8.3pt; color: var(--ink); font-weight: 600; }
+  .review .sub { font-size: 7.5pt; color: var(--muted); font-weight: 400; }
+  .review .loop {
+    margin-left: auto; font-size: 7pt; font-weight: 700; letter-spacing: 0.1em;
+    text-transform: uppercase; color: #B45309; white-space: nowrap;
+  }
+
+  /* ── tables ───────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; vertical-align: top; padding: 1.7mm 2.5mm; border-bottom: 1px solid var(--rule); font-size: 8.2pt; line-height: 1.45; }
+  th { font-size: 7pt; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); border-bottom: 1px solid var(--ink); }
+  td:first-child { color: var(--ink); font-weight: 600; white-space: nowrap; }
+  tr:last-child td { border-bottom: 0; }
+  code { font-family: ui-monospace, Consolas, monospace; font-size: 7.6pt; color: var(--accent); }
+
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+
+  .invariant { display: flex; gap: 2.5mm; margin-bottom: 2.5mm; }
+  .invariant .n {
+    flex: none; width: 5mm; height: 5mm; border-radius: 1.3mm;
+    background: var(--accent-soft); color: var(--accent);
+    font-size: 8pt; font-weight: 700; display: grid; place-items: center;
+  }
+  .invariant .t { font-size: 8.4pt; line-height: 1.5; }
+  .invariant .t b { color: var(--ink); }
+
+  .strip {
+    margin-top: auto; padding: 3mm 3.5mm; border-radius: 2mm;
+    background: #ECFDF5; border: 1px solid #A7F3D0;
+    font-size: 8pt; color: #065F46; line-height: 1.5;
+  }
+  .strip b { color: var(--verify); }
+
+  footer {
+    margin-top: 4mm; padding-top: 2.5mm; border-top: 1px solid var(--rule);
+    display: flex; justify-content: space-between;
+    font-size: 7.5pt; color: var(--faint);
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================ PAGE 1 ============================ -->
+<div class="page">
+  <div class="masthead">
+    <div>
+      <h1>Gen AI Platform for Automated<br>Content Transformation</h1>
+      <div class="sub">Architecture — one source, many deliverables, fully traceable</div>
+    </div>
+    <div class="meta">
+      SIH 2026<br>
+      <b>PS 26154</b><br>
+      NTRO<br>
+      <span style="color:#94A3B8">Blockchain &amp; Cybersecurity</span>
+    </div>
+  </div>
+
+  <section>
+    <h2>1 · The one decision that shapes everything</h2>
+    <p>
+      The obvious implementation prompts the model once per desired output. It fails in four ways:
+      <strong>fact drift</strong> (each call re-reads the source and resamples its facts),
+      <strong>inconsistency</strong> (seven artefacts become seven interpretations),
+      <strong>no traceability</strong> (prose cannot be pointed back at a source passage), and
+      <strong>cost</strong> (the full source is re-sent for every output).
+    </p>
+    <p>
+      This platform instead <strong>separates understanding from expression</strong>. The source is read
+      exactly once and frozen into a single structured <strong>content model</strong>; every artefact is a
+      projection of that one object rather than a fresh reading. That single decision is what makes
+      multi-output consistent rather than merely parallel, and it is why no two deliverables can disagree.
+    </p>
+  </section>
+
+  <section>
+    <h2>2 · Architecture</h2>
+    <div class="diagram">
+      <div>
+        <div class="col-label">Sources</div>
+        <div class="stack">
+          <div class="chip"><i></i>PDF · DOCX · PPTX</div>
+          <div class="chip"><i></i>Scans · handwriting</div>
+          <div class="chip"><i></i>Audio · video</div>
+          <div class="chip"><i></i>URLs</div>
+          <div class="chip"><i></i>Hindi + English</div>
+        </div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div>
+        <div class="col-label">Understand — the only stage that decides facts</div>
+        <div class="core">
+          <div class="kicker">one reading, one decision</div>
+          <h3>Content model</h3>
+          <p>The model reads the source once and freezes what it means. Large documents are
+             batched and merged, so a document larger than the context window still yields one model.</p>
+          <div class="fields">
+            <span>title</span><span>severity</span><span>facts[]+ref</span>
+            <span>iocs[]</span><span>timeline[]</span><span>entities[]</span>
+            <span>key_messages[]</span><span>actions[]</span>
+          </div>
+        </div>
+        <div class="review">
+          <span class="dot"></span>
+          <div>
+            <div class="txt">Human review — the pipeline pauses</div>
+            <div class="sub">Approve, or instruct specific artefacts to regenerate</div>
+          </div>
+          <div class="loop">interrupt · resume</div>
+        </div>
+      </div>
+
+      <div class="arrow">→</div>
+
+      <div>
+        <div class="col-label">Deliverables — generated in parallel</div>
+        <div class="stack">
+          <div class="chip"><i></i>Advisory — PDF</div>
+          <div class="chip"><i></i>Executive briefing — PDF</div>
+          <div class="chip"><i></i>Presentation — PPTX</div>
+          <div class="chip"><i></i>LinkedIn post — TXT</div>
+          <div class="chip"><i></i>X thread — TXT</div>
+          <div class="chip"><i></i>Video package — PDF + SRT</div>
+          <div class="chip"><i></i>Infographic — PNG</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Components</h2>
+    <table>
+      <tr><th style="width:30%">Module</th><th>Responsibility</th></tr>
+      <tr><td>engine/graph.py</td><td>LangGraph state machine: ingest → clean → understand → parallel fan-out → human review → render or refine</td></tr>
+      <tr><td>engine/ingestion/</td><td>Ten modules turning every input type into referenced text blocks. Docling for documents, vision OCR for thin text and figures, transcription for media, translation to English</td></tr>
+      <tr><td>engine/understand.py</td><td>Builds the content model; batches and merges oversized sources; grounds every fact against the corpus and drops what it cannot trace</td></tr>
+      <tr><td>engine/generate.py</td><td>Drafts one artefact per branch, then verifies it (see §5) and regenerates once if grounding is poor</td></tr>
+      <tr><td>engine/render.py</td><td>Deterministic renderers — PDF, PPTX, PNG poster, SRT, text. The model emits blueprints; libraries produce the files</td></tr>
+      <tr><td>engine/providers.py</td><td>Provider abstraction with per-call failover across Gemini, Groq, OpenRouter and local Ollama</td></tr>
+      <tr><td>engine/api.py · jobs.py</td><td>HTTP layer: start, poll, resume, download; asynchronous execution with bounded concurrency</td></tr>
+      <tr><td>frontend/</td><td>Next.js operator dashboard: source intake, output and template selection, live run status, review and export</td></tr>
+    </table>
+  </section>
+
+  <footer>
+    <span>Architecture document · page 1 of 2</span>
+    <span>Gen AI Platform for Automated Content Transformation</span>
+  </footer>
+</div>
+
+<!-- ============================ PAGE 2 ============================ -->
+<div class="page">
+  <section style="margin-top:0">
+    <h2>4 · Four invariants</h2>
+    <p style="margin-bottom:3.5mm">Every design decision below follows from these. They are the properties a reviewer should test us against.</p>
+    <div class="two">
+      <div>
+        <div class="invariant">
+          <span class="n">1</span>
+          <span class="t"><b>Every block carries a reference from birth.</b> Refs are assigned at parse time and never rebuilt downstream. This is the precondition for citation tracing.</span>
+        </div>
+        <div class="invariant">
+          <span class="n">2</span>
+          <span class="t"><b>One call decides facts; the rest only express them.</b> The writer never sees the raw source, so it cannot reinterpret it — only render what understanding already decided.</span>
+        </div>
+      </div>
+      <div>
+        <div class="invariant">
+          <span class="n">3</span>
+          <span class="t"><b>The model produces blueprints; libraries produce files.</b> Same draft renders byte-identically, which is what makes the SHA-256 export manifest meaningful and the output auditable.</span>
+        </div>
+        <div class="invariant">
+          <span class="n">4</span>
+          <span class="t"><b>Human review is structural.</b> The graph pauses via a checkpointed interrupt; it is not a UI that hides output, and the run survives a restart of the process.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>5 · Verification and human review</h2>
+    <p style="margin-bottom:2.5mm">Verification is an input to generation, not a report: a poor score triggers a rewrite before a human ever sees the draft. Three independent checks catch different error classes.</p>
+    <table>
+      <tr><th style="width:26%">Check</th><th>Catches</th></tr>
+      <tr><td>Lexical grounding</td><td>Sentences with no support in the corpus. Stopwords are excluded, so the threshold cannot be met by grammar alone.</td></tr>
+      <tr><td>Number verification</td><td>Changed quantities, dates and versions — the failure a wording comparison can never see. A source stating <strong>72 hours</strong> no longer approves a draft saying <strong>9 hours</strong>.</td></tr>
+      <tr><td>Indicator integrity</td><td>Fabricated IOCs. Any IP, hash, URL or CVE in the output that is absent from the verified set is flagged.</td></tr>
+    </table>
+    <p style="margin-top:3mm">
+      Each claim is returned with a verdict and its <code>source_ref</code>. Review is a genuine gate: the graph stops, and the operator
+      <strong>accepts</strong> or <strong>refines</strong> — refining regenerates only the affected artefacts, not the whole run.
+    </p>
+  </section>
+
+  <section>
+    <h2>6 · Deployment, and independence from any one model</h2>
+    <div class="two">
+      <div>
+        <p>
+          Every model call passes through a provider interface, so the platform is not tied to a vendor.
+          A configured chain is tried in order and rotated <strong>per call</strong>, with cooldowns and
+          capability routing — an image call never goes to a text-only provider.
+        </p>
+        <p style="margin-top:2mm">
+          Because quota is per account rather than per model, rotation is the only mechanism that survives a
+          provider outage. The same interface is what allows the system to run entirely offline.
+        </p>
+      </div>
+      <div>
+        <table>
+          <tr><td style="white-space:normal">Cloud</td><td>Gemini · Groq · OpenRouter, with automatic failover</td></tr>
+          <tr><td style="white-space:normal">On-premises</td><td>Local Ollama — no external calls, no data leaves the network</td></tr>
+          <tr><td style="white-space:normal">Offline</td><td>Deterministic stub, for development and for demonstrating without any key</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>7 · Stack and measured behaviour</h2>
+    <div class="two">
+      <div>
+        <table>
+          <tr><th>Concern</th><th>Choice</th></tr>
+          <tr><td>Orchestration</td><td>LangGraph state machine, checkpointed</td></tr>
+          <tr><td>Documents</td><td>Docling, with layout and table structure</td></tr>
+          <tr><td>OCR</td><td>Vision model, batched for rate limits</td></tr>
+          <tr><td>Media</td><td>Provider transcription</td></tr>
+          <tr><td>Rendering</td><td>python-pptx · reportlab · Pillow</td></tr>
+          <tr><td>Service</td><td>FastAPI · Next.js</td></tr>
+        </table>
+      </div>
+      <div>
+        <table>
+          <tr><th>Measured</th><th>Result</th></tr>
+          <tr><td>Endpoint to review</td><td>45–90 s for a 2-page source and 3 artefacts</td></tr>
+          <tr><td>Handwritten scan</td><td>20 pages read with correct mathematical notation</td></tr>
+          <tr><td>Image-heavy PDF</td><td>17 → 11,406 characters after a page-selection fix</td></tr>
+          <tr><td>803-page document</td><td>Answered in 13 s via a fast text path</td></tr>
+          <tr><td>Test suite</td><td>82 offline tests, no network required</td></tr>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <div class="strip">
+    <b>Why this is more than a wrapper.</b> The engine runs on hostile real-world input — scanned pages, handwritten
+    notes, Hindi audio, sixty-page decks — and produces real files (PDF, PPTX, PNG, SRT) rather than text. Understanding
+    happens once, verification happens automatically, and a human approves before anything is delivered.
+  </div>
+
+  <footer>
+    <span>Architecture document · page 2 of 2</span>
+    <span>Gen AI Platform for Automated Content Transformation</span>
+  </footer>
+</div>
+
+</body>
+</html>

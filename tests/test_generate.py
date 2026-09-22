@@ -1,8 +1,10 @@
 import pytest
 
 from engine.generate import (
+    X_TWEET_LIMIT,
     build_artefact_json_schema,
     check_ioc_integrity,
+    clamp_tweet,
     fact_check_draft,
     run_generate_and_check,
 )
@@ -252,3 +254,28 @@ def test_generated_draft_has_normalised_identifiers():
 
     assert "CVE-2024-31337" in result["draft"]["body"]
     assert "\u2011" not in result["draft"]["body"]
+
+
+def test_clamp_tweet_leaves_a_short_post_untouched():
+    assert clamp_tweet("  short post  ") == "short post"
+
+
+def test_clamp_tweet_shortens_an_over_limit_post_at_a_word_boundary():
+    text = "word " * 80
+
+    clamped = clamp_tweet(text)
+
+    assert len(clamped) <= X_TWEET_LIMIT
+    assert clamped.endswith("\u2026")
+    assert not clamped[:-1].endswith(" ")
+
+
+def test_run_generate_and_check_clamps_overlong_x_thread():
+    overlong = "A" * (X_TWEET_LIMIT + 40)
+    llm = FakeLLM([{"tweets": [overlong]}])
+
+    result = run_generate_and_check("x_thread", CONTENT_MODEL, CORPUS, llm=llm, min_support_ratio=0.0)
+
+    tweets = result["draft"]["tweets"]
+    assert all(len(tweet) <= X_TWEET_LIMIT for tweet in tweets)
+    assert tweets[0].startswith("A")

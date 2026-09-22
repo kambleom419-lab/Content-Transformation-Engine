@@ -227,12 +227,22 @@ def build_generation_prompt(artefact_type: str, content_model: dict, params: dic
     profile = ARTEFACT_PROFILES[artefact_type]
     params = params or {}
     param_line = ", ".join(f"{k}={v}" for k, v in params.items() if v) or "default"
+    # X refuses to prefill a post longer than 280 characters, so an over-long
+    # tweet silently disables the redirect. Keep the model inside the limit.
+    length_rule = (
+        "- Every tweet MUST be 280 characters or fewer, including the numbering "
+        "and hashtags. Count the characters; if a point needs more, split it into "
+        "another tweet in the thread.\n"
+        if artefact_type == "x_thread"
+        else ""
+    )
     return (
         f"You are a {profile['label'].lower()} writer for a national technical intelligence agency.\n"
         f"TARGET TYPE: {artefact_type}\n"
         f"Generation parameters: {param_line}\n"
         "Rules:\n"
         "- Use ONLY facts from the content model. Never invent numbers, dates or IoCs.\n"
+        f"{length_rule}"
         f"{language_rule(params.get('language'))}"
         "- Return a single JSON object only (no markdown fences, no commentary).\n"
         f"- Required keys: {', '.join(profile['fields'])}.\n"
