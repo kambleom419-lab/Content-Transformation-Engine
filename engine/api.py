@@ -156,9 +156,19 @@ def _record_snapshot(thread_id: str, snapshot: dict) -> None:
         REGISTRY.update(thread_id, status=COMPLETE, snapshot=clean, review_request=None, error=None)
 
 
-def _run_graph(thread_id: str, state: dict | None, decision: dict | None) -> None:
+def _run_graph(
+    thread_id: str,
+    state: dict | None,
+    decision: dict | None,
+    checkpoint_id: str | None = None,
+) -> None:
+    configurable: dict = {"thread_id": thread_id}
+    # A rewind targets an earlier checkpoint instead of the latest one, which is
+    # what restores the human_review pause after a decision was already taken.
+    if checkpoint_id:
+        configurable["checkpoint_id"] = checkpoint_id
     config = {
-        "configurable": {"thread_id": thread_id},
+        "configurable": configurable,
         # Bound the fan-out. Every selected output is one concurrent provider
         # request, so without a cap "select all 7" fires 7 at once and the
         # weakest provider in the chain answers with a 429. See
@@ -389,6 +399,41 @@ def resume_run(thread_id: str, request: ResumeRequest) -> dict:
         EXECUTOR.submit(_run_graph, thread_id, None, decision)
 
     return {"thread_id": thread_id, "status": RUNNING, "action": action}
+
+
+@app.post("/run/{thread_id}/reopen", status_code=202)
+def reopen_run(thread_id: str) -> dict:
+    """
+    Rewind a run to its human_review pause, discarding the decision already made.
+
+    A run is normally one-shot: once accept reaches guardrails_render the
+    checkpoint sits at END and resume refuses. The checkpointer keeps the whole
+    history, so the pause can be restored and the decision replayed. This exists
+    for demos and for testing the review gate, where a click recorded by mistake
+    should not cost a full regeneration.
+
+    Process-local, like everything else here: a restart loses the history.
+    """
+    run = _require_run(thread_id)
+    if run.status == RUNNING:
+        raise HTTPException(409, "run is still working; wait for it to pause or finish")
+
+    config = {"configurable": {"thread_id": thread_id}}
+    review_checkpoint = next(
+        (
+            snapshot
+            for snapshot in GRAPH.get_state_history(config)
+            if any(getattr(task, "interrupts", None) for task in (snapshot.tasks or ()))
+        ),
+        None,
+    )
+    if review_checkpoint is None:
+        raise HTTPException(404, "this run has no review pause to restore")
+
+    checkpoint_id = review_checkpoint.config["configurable"]["checkpoint_id"]
+    REGISTRY.update(thread_id, status=RUNNING, error=None)
+    EXECUTOR.submit(_run_graph, thread_id, None, None, checkpoint_id)
+    return {"thread_id": thread_id, "status": RUNNING, "reopened_to": checkpoint_id}
 
 
 @app.get("/run/{thread_id}/preview/{artefact_type}")

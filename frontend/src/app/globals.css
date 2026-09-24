@@ -283,7 +283,7 @@ body { background: var(--background); color: var(--text); font-family: var(--fon
 .relay-generate:disabled { border-color: #303846; background: #252d3a; color: #697486; }
 .relay-shortcut { display: flex; justify-content: space-between; padding: 2px 2px 0; color: var(--subtle); font-size: 9px; }
 
-.relay-results-layout { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 15px; align-items: start; }
+.relay-results-layout { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 15px; align-items: start; }
 .relay-document-panel { overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); }
 .relay-document-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 17px; border-bottom: 1px solid var(--border); }
 .relay-document-title, .relay-document-actions, .relay-document-actions button { display: flex; align-items: center; gap: 7px; }
@@ -305,7 +305,16 @@ body { background: var(--background); color: var(--text); font-family: var(--fon
 .relay-document h3 { margin: 27px 0 11px; color: var(--text); font-size: 11px; font-weight: 500; }
 .relay-document ul { margin: 0; padding-left: 18px; }
 .relay-document-footer { display: flex; justify-content: space-between; margin-top: 105px; padding-top: 13px; border-top: 1px solid var(--border); color: var(--subtle); font-size: 9px; }
-.relay-results-sidebar { display: grid; gap: 15px; }
+.relay-results-sidebar { display: grid; gap: 15px; min-width: 0; }
+.relay-results-sidebar > * { min-width: 0; }
+
+/* Long unbroken tokens — URLs, IoC hashes, model output that arrives without
+   spaces — must not widen a fixed column. overflow-wrap:anywhere lowers an
+   element's min-content width, so a 280px sidebar holds its track instead of
+   being pushed wide and dragging the whole page into a horizontal scroll. */
+.relay-results-layout .relay-panel,
+.relay-results-layout .relay-summary-row,
+.relay-document { overflow-wrap: anywhere; }
 .relay-meta-file { display: flex; align-items: center; gap: 8px; margin: 18px 0 8px; padding: 10px; border: 1px solid var(--border); border-radius: 5px; color: var(--muted); font-size: 9px; }
 .relay-meta-file svg { color: var(--blue); }
 .relay-version { display: flex; gap: 10px; padding: 12px 0; border-bottom: 1px solid #252c38; color: var(--subtle); }
@@ -3864,6 +3873,428 @@ body {
 .relay-output-lang input:focus {
   outline: none;
   border-color: var(--relay-primary);
+}
+
+/* ==========================================================================
+   Human review — decision actions
+   The panel used to show two identical grey bars, so neither read as the
+   decision. One primary, one deliberately quiet secondary, each carrying the
+   states a button actually enters: hover, focus-visible, active, disabled,
+   loading.
+   ========================================================================== */
+
+.relay-review-note {
+  display: block;
+  margin-top: 16px;
+}
+
+.relay-review-note > span {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--relay-muted);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.relay-review-note textarea {
+  display: block;
+  width: 100%;
+  min-height: 78px;
+  padding: 11px 12px;
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 6px;
+  outline: none;
+  background: #0f0f0f;
+  color: var(--relay-primary);
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.6;
+  resize: vertical;
+  transition: border-color 150ms ease-out, box-shadow 150ms ease-out;
+}
+
+.relay-review-note textarea::placeholder { color: var(--relay-muted); }
+
+.relay-review-note textarea:focus-visible {
+  border-color: var(--relay-accent);
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 10%);
+}
+
+.relay-review-hint {
+  margin: 10px 0 0;
+  color: var(--relay-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.relay-review-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.relay-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  transition: background 150ms ease-out, border-color 150ms ease-out,
+    color 150ms ease-out, transform 150ms ease-out;
+}
+
+.relay-btn svg { flex: none; }
+.relay-btn:active:not(:disabled) { transform: scale(0.985); }
+.relay-btn:focus-visible { outline: 2px solid var(--relay-accent); outline-offset: 2px; }
+.relay-btn:disabled { cursor: not-allowed; }
+
+/* Primary — the decision the flow resolves to. It carries the weight through
+   fill, size and type weight, so the secondary can afford to stay quiet. */
+.relay-btn-primary {
+  border-color: #f2f2f2;
+  background: #f2f2f2;
+  color: #0a0a0a;
+  font-size: 13.5px;
+}
+
+.relay-btn-primary:hover:not(:disabled) {
+  border-color: #ffffff;
+  background: #ffffff;
+}
+
+.relay-btn-primary:disabled {
+  border-color: var(--relay-border);
+  background: #151515;
+  color: var(--relay-muted);
+}
+
+/* Secondary — a valid alternative that must not compete with it. */
+.relay-btn-secondary {
+  border-color: #2f2f2f;
+  background: transparent;
+  color: var(--relay-secondary);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.relay-btn-secondary:hover:not(:disabled) {
+  border-color: #52525b;
+  background: #1a1a1a;
+  color: var(--relay-primary);
+}
+
+.relay-btn-secondary:disabled {
+  border-color: var(--relay-border);
+  color: #52525b;
+}
+
+/* what accepting actually commits to, stated before the buttons */
+.relay-review-consequence {
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--relay-border);
+  color: var(--relay-muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* Shared loading indicator. The class was referenced by the dashboard and the
+   results view but never defined, so those loaders never actually turned. */
+.relay-spinner {
+  display: inline-block;
+  width: 13px;
+  height: 13px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: relay-spin 700ms linear infinite;
+}
+
+@keyframes relay-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .relay-btn { transition: none; }
+  .relay-btn:active:not(:disabled) { transform: none; }
+  .relay-spinner { animation-duration: 1600ms; }
+}
+
+/* ==========================================================================
+   Results inspector — the right-hand column
+   One surface divided by rules, not four stacked cards. The column is an
+   inspector standing beside the document, so it reads as one instrument
+   instead of four boxes competing for the same attention.
+   ========================================================================== */
+
+.relay-inspector {
+  border: 1px solid var(--relay-border);
+  border-radius: 10px;
+  background: var(--relay-card);
+  overflow: hidden;
+}
+
+.relay-insp-section {
+  padding: 20px;
+  border-top: 1px solid var(--relay-border);
+}
+
+.relay-insp-section:first-child { border-top: 0; }
+
+.relay-insp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.relay-insp-head h2 {
+  margin: 0;
+  color: var(--relay-primary);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.relay-insp-badge {
+  flex: none;
+  padding: 3px 9px;
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 999px;
+  color: var(--relay-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.relay-insp-badge.ok { border-color: #2f5d47; color: #7fce9f; }
+.relay-insp-badge.warn { border-color: #6b5326; color: #e2b566; }
+
+/* the one number that matters in this column */
+.relay-metric { display: grid; gap: 9px; }
+
+.relay-metric-top { display: flex; align-items: baseline; gap: 9px; }
+
+.relay-metric-value {
+  color: var(--relay-primary);
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.relay-metric-label {
+  color: var(--relay-muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.relay-meter {
+  height: 4px;
+  border-radius: 999px;
+  background: #232323;
+  overflow: hidden;
+}
+
+.relay-meter i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--relay-accent);
+}
+
+.relay-insp-note {
+  margin: 12px 0 0;
+  color: var(--relay-muted);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+/* verdicts — status is carried by a marker and the word, never colour alone */
+.relay-verdicts {
+  display: grid;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  max-height: 320px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.relay-verdict {
+  display: flex;
+  gap: 10px;
+  padding: 11px 0;
+  border-top: 1px solid var(--relay-border);
+}
+
+.relay-verdict:first-child { border-top: 0; }
+
+.relay-verdict-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+  background: var(--relay-muted);
+}
+
+.relay-verdict.ok .relay-verdict-dot { background: #4ea87a; }
+.relay-verdict.flag .relay-verdict-dot { background: #d8a340; }
+
+.relay-verdict > div { min-width: 0; }
+
+.relay-verdict-claim {
+  margin: 0;
+  color: var(--relay-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.relay-verdict-meta {
+  margin: 4px 0 0;
+  color: var(--relay-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  overflow-wrap: anywhere;
+}
+
+/* sources and exports — plain ruled rows rather than nested cards */
+.relay-src-list,
+.relay-export-list {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.relay-src-list li,
+.relay-export-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--relay-border);
+}
+
+.relay-src-list li:first-child,
+.relay-export-list li:first-child { border-top: 0; }
+
+.relay-src-name {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--relay-primary);
+  font-size: 11.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relay-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.relay-insp-label {
+  width: 100%;
+  margin-bottom: 2px;
+  color: var(--relay-muted);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.relay-chip {
+  padding: 2px 8px;
+  border: 1px solid var(--relay-border-strong);
+  border-radius: 5px;
+  color: var(--relay-secondary);
+  font-size: 10.5px;
+  overflow-wrap: anywhere;
+}
+
+.relay-chip.mono { font-family: ui-monospace, Consolas, monospace; }
+
+.relay-export-name { color: var(--relay-primary); font-size: 11.5px; }
+.relay-export-name em { color: var(--relay-muted); font-style: normal; }
+
+.relay-export-actions { display: inline-flex; align-items: center; gap: 10px; }
+
+.relay-export-size {
+  color: var(--relay-secondary);
+  font-size: 10.5px;
+  text-decoration: none;
+}
+
+.relay-export-size:hover { color: var(--relay-primary); text-decoration: underline; }
+
+/* resolved decision, once the operator has acted */
+.relay-insp-fact {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.relay-insp-fact span { color: var(--relay-muted); font-size: 11.5px; }
+
+.relay-insp-fact strong {
+  color: var(--relay-primary);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* ==========================================================================
+   Scrollbars
+   The platform default is a light bar with arrows. On these dark surfaces it
+   reads as an unstyled browser artefact. Thin, theme-matched, and transparent
+   until there is something to scroll. scrollbar-width/color inherit, so
+   declaring them on html covers every scroller in the app.
+   ========================================================================== */
+
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
+}
+
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-corner { background: transparent; }
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #3f3f46;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #52525b;
+  background-clip: content-box;
+}
+
+/* a field that scrolls should not also grow a permanent bar */
+.relay-review-note textarea {
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #3f3f46 transparent;
 }
 
 

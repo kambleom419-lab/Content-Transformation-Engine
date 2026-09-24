@@ -2,13 +2,9 @@
 
 import {
   ChevronDown,
-  FileText,
-  Folder,
-  History,
   LayoutDashboard,
   Menu,
   MoreHorizontal,
-  Settings,
   X,
 } from "lucide-react";
 import Link from "next/link";
@@ -17,10 +13,6 @@ import { useState } from "react";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { label: "Projects", href: "/projects", icon: Folder },
-  { label: "Templates", href: "/templates", icon: FileText },
-  { label: "History", href: "/history", icon: History },
-  { label: "Settings", href: "/settings", icon: Settings },
 ];
 
 export function AppSidebar() {

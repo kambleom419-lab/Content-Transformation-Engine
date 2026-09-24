@@ -8,6 +8,7 @@ structured content_model that every downstream artefact is generated from.
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -25,7 +26,18 @@ from engine.recipes import (
     repair_content_model,
 )
 
-DEFAULT_MAX_CHARS_PER_BATCH = 9000
+
+def _default_chars_per_batch() -> int:
+    try:
+        return max(2000, int(os.getenv("UNDERSTAND_MAX_CHARS_PER_BATCH", "9000")))
+    except ValueError:
+        return 9000
+
+
+# Batches are processed one after another, so a large source costs one model
+# call per batch plus a merge — the dominant latency for a big document. Raising
+# this trades prompt size for fewer round-trips.
+DEFAULT_MAX_CHARS_PER_BATCH = _default_chars_per_batch()
 
 _IPV4 = r"\b(?:(?:25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(?:25[0-5]|2[0-4]\d|1?\d?\d)\b"
 _DOMAIN = r"\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:[a-z]{2,24})\b"

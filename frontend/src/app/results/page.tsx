@@ -1,9 +1,9 @@
 "use client";
 
-import { AlertTriangle, CheckCircle2, Copy, Download, FileText, Loader2, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Copy, Download, FileText, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { ArtefactPreview } from "@/components/artefact-previews";
 import { AppSidebar } from "@/components/app-sidebar";
 import { FilePreview } from "@/components/file-preview";
@@ -37,8 +37,11 @@ function ResultsView() {
   const threadId = useSearchParams().get("id") ?? "";
   const [run, setRun] = useState<RunDetail | null>(null);
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<"" | "refine" | "accept">("");
   const [instruction, setInstruction] = useState("");
+  const [hint, setHint] = useState("");
+  const instructionRef = useRef<HTMLTextAreaElement>(null);
+  const busy = busyAction !== "";
   const [reloadToken, setReloadToken] = useState(0);
   const [active, setActive] = useState("");
   const [copied, setCopied] = useState(false);
@@ -77,8 +80,9 @@ function ResultsView() {
 
   const resend = async (decision: { action: "accept" | "refine"; instruction?: string; types?: string[] }) => {
     if (!threadId) return;
-    setBusy(true);
+    setBusyAction(decision.action);
     setError("");
+    setHint("");
     try {
       await resumeRun(threadId, decision);
       setInstruction("");
@@ -86,8 +90,19 @@ function ResultsView() {
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "unknown error");
     } finally {
-      setBusy(false);
+      setBusyAction("");
     }
+  };
+
+  // The engine refuses a refine without an instruction, so catch it here and
+  // point at the field instead of letting the request fail.
+  const requestRefine = () => {
+    if (!instruction.trim()) {
+      setHint("Describe what should change, or accept the draft as it is.");
+      instructionRef.current?.focus();
+      return;
+    }
+    void resend({ action: "refine", instruction, types: activeType ? [activeType] : [] });
   };
 
   const copyDraft = async () => {
@@ -125,16 +140,9 @@ function ResultsView() {
 
       {error && <div className="relay-panel relay-error-panel" style={{ marginBottom: 16 }}><strong>Error</strong><p>{error}</p></div>}
 
-      {run?.warnings?.length ? (
-        <div className="relay-panel" style={{ marginBottom: 16 }}>
-          <div className="relay-panel-header"><div><span className="relay-index">note</span><h2>Ingestion warnings</h2></div></div>
-          <ul>{run.warnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>
-        </div>
-      ) : null}
-
       {run?.status === "running" ? (
         <div className="relay-panel" style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <Loader2 size={16} className="relay-spinner" />
+          <span className="relay-spinner" aria-hidden="true" />
           <span>Ingesting sources and generating deliverables — this can take a few minutes.</span>
         </div>
       ) : null}
@@ -188,68 +196,145 @@ function ResultsView() {
         </section>
 
         <aside className="relay-results-sidebar">
-          <div className="relay-panel">
-            <div className="relay-panel-header"><div><span className="relay-index">checks</span><h2>Fact verification</h2></div>{flagged.length ? <ShieldAlert size={15} /> : <ShieldCheck size={15} />}</div>
-            {check?.meta ? <div className="relay-summary-row"><span>support ratio</span><strong>{Math.round((check.meta.support_ratio ?? 0) * 100)}%</strong></div> : null}
-            {check?.meta ? <div className="relay-summary-row"><span>claims checked</span><strong>{check.meta.sentences_checked ?? verdicts.length}</strong></div> : null}
-            {check?.meta?.unverified_iocs?.length ? <div className="relay-summary-row"><span>unverified IoCs</span><strong>{check.meta.unverified_iocs.join(", ")}</strong></div> : null}
-            <div style={{ maxHeight: 260, overflowY: "auto", marginTop: 8 }}>
-              {verdicts.map((verdict, index) => (
-                <div key={index} style={{ display: "flex", gap: 8, padding: "6px 0", borderTop: "1px solid var(--relay-border, #262626)" }}>
-                  {verdict.verdict === "supported" ? <CheckCircle2 size={14} style={{ color: "#41b883", flexShrink: 0, marginTop: 2 }} /> : <AlertTriangle size={14} style={{ color: "#e0a33a", flexShrink: 0, marginTop: 2 }} />}
-                  <div>
-                    <small style={{ display: "block", opacity: 0.9 }}>{verdict.claim}</small>
-                    <small style={{ opacity: 0.55 }}>{verdict.verdict}{verdict.citation ? ` · ${verdict.citation}` : ""}</small>
+          <div className="relay-inspector">
+            <section className="relay-insp-section">
+              <header className="relay-insp-head">
+                <h2>Fact verification</h2>
+                <span className={`relay-insp-badge ${flagged.length ? "warn" : "ok"}`}>
+                  {flagged.length ? `${flagged.length} flagged` : "all supported"}
+                </span>
+              </header>
+
+              {check?.meta ? (
+                <>
+                  <div className="relay-metric">
+                    <div className="relay-metric-top">
+                      <span className="relay-metric-value">{Math.round((check.meta.support_ratio ?? 0) * 100)}%</span>
+                      <span className="relay-metric-label">claims grounded in the source</span>
+                    </div>
+                    <div className="relay-meter">
+                      <i style={{ width: `${Math.round((check.meta.support_ratio ?? 0) * 100)}%` }} />
+                    </div>
                   </div>
-                </div>
-              ))}
-              {!verdicts.length ? <p className="relay-panel-description">No verdicts for this artefact.</p> : null}
-            </div>
-          </div>
+                  <p className="relay-insp-note">
+                    {check.meta.sentences_checked ?? verdicts.length} claims checked
+                    {check.meta.unverified_iocs?.length ? ` · ${check.meta.unverified_iocs.length} unverified IoCs` : ""}
+                  </p>
+                </>
+              ) : null}
 
-          <div className="relay-panel">
-            <div className="relay-panel-header"><div><span className="relay-index">review</span><h2>Human review</h2></div></div>
-            <p className="relay-panel-description">{awaiting ? "This run is paused for your decision." : "Approve, or request a rewrite of specific artefacts."}</p>
-            {awaiting ? (
-              <>
-                <textarea value={instruction} onChange={(event) => setInstruction(event.target.value)} placeholder="optional: what should change? e.g. shorten the advisory and add patch urgency" />
-                <button className="relay-generate" type="button" disabled={busy} onClick={() => resend({ action: "refine", instruction, types: activeType ? [activeType] : [] })}><RefreshCw size={14} /> Refine {activeType ? artefactLabel(activeType) : ""}</button>
-                <button className="relay-generate" type="button" disabled={busy} onClick={() => resend({ action: "accept" })}><CheckCircle2 size={14} /> Accept &amp; export</button>
-              </>
-            ) : (
-              <div className="relay-summary-row"><span>decision</span><strong>{run?.review?.action ?? "—"}</strong></div>
-            )}
-          </div>
+              <ul className="relay-verdicts">
+                {verdicts.map((verdict, index) => (
+                  <li className={`relay-verdict ${verdict.verdict === "supported" ? "ok" : "flag"}`} key={index}>
+                    <span className="relay-verdict-dot" aria-hidden="true" />
+                    <div>
+                      <p className="relay-verdict-claim">{verdict.claim}</p>
+                      <p className="relay-verdict-meta">
+                        {verdict.verdict}
+                        {verdict.citation ? ` · ${verdict.citation}` : ""}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              {!verdicts.length ? <p className="relay-insp-note">No verdicts for this artefact.</p> : null}
+            </section>
 
-          <div className="relay-panel">
-            <div className="relay-panel-header"><div><span className="relay-index">source</span><h2>Sources</h2></div></div>
-            {(run?.sources ?? []).map((source) => (
-              <div key={source.source_id} className="relay-summary-row"><span>{source.kind}</span><strong>{source.source_id}</strong></div>
-            ))}
-            {run?.content_model?.entities?.length ? <div className="relay-summary-row"><span>entities</span><strong>{run.content_model.entities.slice(0, 5).join(", ")}</strong></div> : null}
-            {run?.content_model?.iocs?.length ? <div className="relay-summary-row"><span>iocs</span><strong>{run.content_model.iocs.slice(0, 5).join(", ")}</strong></div> : null}
-          </div>
-
-          {run?.export?.files?.length ? (
-            <div className="relay-panel">
-              <div className="relay-panel-header"><div><span className="relay-index">export</span><h2>Export pack</h2></div></div>
-              {run.export.files.map((file) => (
-                <div key={`${file.type}-${file.ext}`} className="relay-summary-row">
-                  <span>{file.type}.{file.ext}</span>
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}>
-                    <FilePreview
-                      threadId={threadId}
-                      type={file.type}
-                      ext={file.ext}
-                      draft={run?.artefacts?.[file.type]}
+            <section className="relay-insp-section">
+              <header className="relay-insp-head">
+                <h2>Human review</h2>
+                {awaiting ? <span className="relay-insp-badge warn">paused</span> : null}
+              </header>
+              <p className="relay-insp-note">
+                {awaiting ? "This run is paused for your decision." : "Approve, or request a rewrite of specific artefacts."}
+              </p>
+              {awaiting ? (
+                <>
+                  <label className="relay-review-note">
+                    <span>Refine instruction</span>
+                    <textarea
+                      ref={instructionRef}
+                      value={instruction}
+                      onChange={(event) => { setInstruction(event.target.value); if (hint) setHint(""); }}
+                      placeholder="What should change? e.g. shorten the advisory and lead with the patch"
                     />
-                    <a href={downloadUrl(threadId, file.type, file.ext)} style={{ color: "inherit" }}>{(file.bytes / 1024).toFixed(1)} KB</a>
-                  </span>
+                  </label>
+                  {hint ? <p className="relay-review-hint">{hint}</p> : null}
+                  <p className="relay-review-consequence">
+                    Accepting renders every artefact and writes the export manifest.
+                    {activeType ? ` Refining rewrites only the ${artefactLabel(activeType).toLowerCase()}.` : ""}
+                  </p>
+                  <div className="relay-review-actions">
+                    <button className="relay-btn relay-btn-secondary" type="button" disabled={busy} onClick={requestRefine}>
+                      {busyAction === "refine" ? <span className="relay-spinner" aria-hidden="true" /> : <RefreshCw size={14} />}
+                      {busyAction === "refine" ? "Refining…" : `Refine ${activeType ? artefactLabel(activeType) : ""}`.trim()}
+                    </button>
+                    <button className="relay-btn relay-btn-primary" type="button" disabled={busy} onClick={() => resend({ action: "accept" })}>
+                      {busyAction === "accept" ? <span className="relay-spinner" aria-hidden="true" /> : <CheckCircle2 size={14} />}
+                      {busyAction === "accept" ? "Exporting…" : "Accept & export"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <div className="relay-insp-fact">
+                  <span>decision</span>
+                  <strong>{run?.review?.action ?? "—"}</strong>
                 </div>
-              ))}
-              {run.export.render_error ? <p className="relay-panel-description">render error: {run.export.render_error}</p> : null}
-            </div>
-          ) : null}
+              )}
+            </section>
+
+            <section className="relay-insp-section">
+              <header className="relay-insp-head"><h2>Sources</h2></header>
+              <ul className="relay-src-list">
+                {(run?.sources ?? []).map((source) => (
+                  <li key={source.source_id}>
+                    <span className="relay-chip">{source.kind}</span>
+                    <span className="relay-src-name" title={source.source_id}>{source.source_id}</span>
+                  </li>
+                ))}
+              </ul>
+              {run?.content_model?.entities?.length ? (
+                <div className="relay-chip-row">
+                  <span className="relay-insp-label">entities</span>
+                  {run.content_model.entities.slice(0, 6).map((entity) => <span className="relay-chip" key={entity}>{entity}</span>)}
+                </div>
+              ) : null}
+              {run?.content_model?.iocs?.length ? (
+                <div className="relay-chip-row">
+                  <span className="relay-insp-label">indicators</span>
+                  {run.content_model.iocs.slice(0, 6).map((ioc) => <span className="relay-chip mono" key={ioc}>{ioc}</span>)}
+                </div>
+              ) : null}
+            </section>
+
+            {run?.export?.files?.length ? (
+              <section className="relay-insp-section">
+                <header className="relay-insp-head">
+                  <h2>Export pack</h2>
+                  <span className="relay-insp-badge">{run.export.files.length} files</span>
+                </header>
+                <ul className="relay-export-list">
+                  {run.export.files.map((file) => (
+                    <li key={`${file.type}-${file.ext}`}>
+                      <span className="relay-export-name">{file.type}.<em>{file.ext}</em></span>
+                      <span className="relay-export-actions">
+                        <FilePreview
+                          threadId={threadId}
+                          type={file.type}
+                          ext={file.ext}
+                          draft={run?.artefacts?.[file.type]}
+                        />
+                        <a className="relay-export-size" href={downloadUrl(threadId, file.type, file.ext)}>
+                          {(file.bytes / 1024).toFixed(1)} KB
+                        </a>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {run.export.render_error ? <p className="relay-insp-note">render error: {run.export.render_error}</p> : null}
+              </section>
+            ) : null}
+          </div>
         </aside>
       </div>
     </Shell>

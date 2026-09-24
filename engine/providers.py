@@ -62,6 +62,13 @@ def _is_media(part: MediaPart) -> bool:
     return mime.startswith("audio/") or mime.startswith("video/")
 
 
+def _env_number(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except (TypeError, ValueError):
+        return default
+
+
 class OpenAICompatAdapter(LLMProvider):
     """
     One provider speaking the OpenAI chat-completions dialect.
@@ -69,6 +76,12 @@ class OpenAICompatAdapter(LLMProvider):
     vision_model  — used instead of `model` when the call carries images.
     transcribe_model — when set, audio/video parts route to /audio/transcriptions
                        instead of the chat endpoint.
+
+    Latency on this pipeline is roughly output_tokens / provider_throughput, so a
+    model that rambles turns one call into minutes. LLM_MAX_TOKENS caps that when
+    set; unset (0) leaves the provider default, which is safest for schemas whose
+    JSON must not be truncated. LLM_TIMEOUT_S bounds a single request so a hung
+    upstream fails over to the next provider instead of stalling the whole run.
     """
 
     def __init__(
@@ -80,8 +93,9 @@ class OpenAICompatAdapter(LLMProvider):
         vision_model: str | None = None,
         transcribe_model: str | None = None,
         extra_headers: dict | None = None,
-        timeout: float = 240.0,
+        timeout: float | None = None,
         supports_json_schema: bool = True,
+        max_tokens: int | None = None,
     ):
         self.name = name
         self.base_url = base_url.rstrip("/")
@@ -90,8 +104,10 @@ class OpenAICompatAdapter(LLMProvider):
         self.transcribe_model = transcribe_model or None
         self.api_key = api_key
         self.extra_headers = extra_headers or {}
-        self.timeout = timeout
+        self.timeout = timeout if timeout is not None else _env_number("LLM_TIMEOUT_S", 240.0)
         self.supports_json_schema = supports_json_schema
+        resolved_max = max_tokens if max_tokens is not None else _env_number("LLM_MAX_TOKENS", 0)
+        self.max_tokens = int(resolved_max) if resolved_max and resolved_max > 0 else None
 
     @property
     def supports_vision(self) -> bool:
@@ -146,6 +162,8 @@ class OpenAICompatAdapter(LLMProvider):
             "messages": [{"role": "user", "content": self._content(prompt, parts)}],
             "temperature": 0.2,
         }
+        if self.max_tokens:
+            body["max_tokens"] = self.max_tokens
         if json_schema:
             if self.supports_json_schema:
                 body["response_format"] = {

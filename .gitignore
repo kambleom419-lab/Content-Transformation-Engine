@@ -36,3 +36,16 @@ coverage/
 /docs/
 /samples/
 /demo.py
+
+# Submission packaging — assembled locally, not part of the repo
+/submission/
+
+# Architecture document — submitted as a deliverable, kept out of the repo
+/ARCHITECTURE.md
+/ARCHITECTURE.pdf
+
+# Python test cache
+.pytest_cache/
+
+# Test suite — kept locally, not shipped in the submission repo
+/tests/
